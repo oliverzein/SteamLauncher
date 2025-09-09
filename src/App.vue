@@ -2,7 +2,7 @@
   <div id="app" class="app">
     <header class="header">
       <h1>Steam Game Launcher</h1>
-      <button @click="openSettings" class="settings-btn">⚙️</button>
+      <button @click="openSettings" class="app-settings-btn">⚙️</button>
     </header>
     
     <main class="main">
@@ -19,19 +19,21 @@
           v-for="(game, index) in games" 
           :key="game.steamID"
           class="game-card"
-          @click="launchGame(index)"
         >
           <img 
             v-if="game.icon" 
             :src="game.icon" 
             :alt="game.name" 
             class="game-icon"
+            @click="launchGame(index)"
           />
           <div class="game-info">
-            <h3 class="game-title">{{ game.name }}</h3>
-            <button class="launch-btn" @click.stop="launchGame(index)">
-              Launch
-            </button>
+            <span class="game-title">{{ game.name }}</span>
+            <button @click="configureGame(index)" class="game-settings-icon">⚙️</button>
+            <!--<h3 class="title-row">
+              <span class="game-title">{{ game.name }}</span>
+              <div class="game-settings-icon" @click.stop="configureGame(index)">⚙️</div>
+            </h3>-->
           </div>
         </div>
       </div>
@@ -77,6 +79,10 @@ const openSettings = async () => {
     console.error('Settings error:', error)
   }
 }
+
+const configureGame = async (index: number) => {
+  await window.electronAPI.openConfigure(index)
+}
 </script>
 
 <style>
@@ -103,6 +109,11 @@ body {
   overflow-x: hidden;
 }
 
+.main {
+  flex: 1;
+  padding: 2rem;
+}
+
 .app {
   min-height: 100vh;
   display: flex;
@@ -124,7 +135,7 @@ body {
   font-weight: 600;
 }
 
-.settings-btn {
+.app-settings-btn {
   background: none;
   border: none;
   color: var(--text-color);
@@ -133,15 +144,11 @@ body {
   padding: 0.5rem;
   border-radius: 4px;
   transition: background-color 0.2s;
+  display: block;
 }
 
-.settings-btn:hover {
+.app-settings-btn:hover {
   background-color: var(--accent-color);
-}
-
-.main {
-  flex: 1;
-  padding: 2rem;
 }
 
 .loading, .no-games {
@@ -152,9 +159,8 @@ body {
 
 .game-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, 320px);
   gap: 1.5rem;
-  max-width: 1200px;
   margin: 0 auto;
 }
 
@@ -172,58 +178,40 @@ body {
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
-.game-icon {
-  width: 100%;
-  height: 150px;
-  object-fit: contain;
-  display: block;
-  background-color: var(--card-bg);
-}
-
 .game-info {
-  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem;
 }
 
 .game-title {
   font-size: 1rem;
   font-weight: 600;
-  margin-bottom: 0.75rem;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  line-clamp: 2;
-  overflow: hidden;
+  margin: 0;
+  flex: 1;
 }
 
-.launch-btn {
-  width: 100%;
-  padding: 0.75rem;
-  background-color: var(--accent-color);
-  color: var(--text-color);
+.game-icon {
+  width: 320px;
+  object-fit: contain;
+  display: block;
+  background-color: var(--card-bg);
+}
+
+.game-settings-icon {
+  background: none;
   border: none;
-  border-radius: 4px;
-  font-size: 0.9rem;
-  font-weight: 500;
+  color: var(--text-color);
+  font-size: 1.0rem;
   cursor: pointer;
+  border-radius: 4px;
   transition: background-color 0.2s;
+  display: block;
 }
 
-.launch-btn:hover {
-  background-color: var(--hover-color);
+.game-settings-icon:hover {
+  transform: scale(1.5);
 }
 
-@media (max-width: 768px) {
-  .game-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 1rem;
-  }
-  
-  .header {
-    padding: 1rem;
-  }
-  
-  .main {
-    padding: 1rem;
-  }
-}
 </style>

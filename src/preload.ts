@@ -41,6 +41,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Listen for games loaded event
   onGamesLoaded: (callback: (games: Game[]) => void): void => {
     ipcRenderer.on('games-loaded', (event, games: Game[]) => callback(games))
+  },
+
+  // Open configure window for a game
+  openConfigure: (index: number): Promise<void> => 
+    ipcRenderer.invoke('open-configure', index),
+  
+  // Save game configuration
+  saveGameConfig: (index: number, user: string, password: string): Promise<void> => 
+    ipcRenderer.invoke('save-game-config', index, user, password),
+  
+  // Listen for configure game event
+  onConfigureGame: (callback: (game: Game, index: number) => void): void => {
+    ipcRenderer.on('configure-game', (event, game: Game, index: number) => callback(game, index))
   }
 })
 
@@ -53,6 +66,9 @@ declare global {
       saveConfig: (config: Partial<Config>) => Promise<void>
       openSettings: () => Promise<void>
       onGamesLoaded: (callback: (games: Game[]) => void) => void
+      openConfigure: (index: number) => Promise<void>
+      saveGameConfig: (index: number, user: string, password: string) => Promise<void>
+      onConfigureGame: (callback: (game: Game, index: number) => void) => void
     }
   }
 }

@@ -106,13 +106,27 @@ if (started) {
 
 const createSettingsWindow = () => {
   const settingsWin = new BrowserWindow({
-    width: 400,
+    width: 500,
     height: 300,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
   })
   settingsWin.loadFile(path.join(process.cwd(), 'settings.html'))
+}
+
+const createConfigureWindow = (index: number) => {
+  const configureWin = new BrowserWindow({
+    width: 500,
+    height: 300,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  })
+  configureWin.loadFile(path.join(process.cwd(), 'configure.html'))
+  configureWin.webContents.once('did-finish-load', () => {
+    configureWin.webContents.send('configure-game', config.steamApps[index], index)
+  })
 }
 
 const createWindow = () => {
@@ -175,6 +189,17 @@ ipcMain.handle('save-config', async (event, newConfig) => {
   if (mainWindow) {
     mainWindow.webContents.send('games-loaded', games)
   }
+})
+
+ipcMain.handle('open-configure', async (event, index: number) => {
+  createConfigureWindow(index)
+})
+
+ipcMain.handle('save-game-config', async (event, index: number, user: string, password: string) => {
+  config.steamApps[index].user = user
+  config.steamApps[index].password = password
+  saveConfig()
+  steamStarters[index] = new SteamStarter(user, password, config.steamApps[index].steamID, 'steam')
 })
 
 ipcMain.handle('open-settings', async () => {
