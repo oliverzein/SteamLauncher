@@ -17,8 +17,8 @@
     <h1>Settings</h1>
     <form id="settings-form">
       <label>
-        Steam Compatdata Path:
-        <input type="text" id="compatdataPath">
+        Steam Compatdata Paths (comma-separated):
+        <textarea id="compatdataPaths" rows="3"></textarea>
       </label>
       <button type="submit">Save</button>
     </form>
@@ -26,13 +26,13 @@
     <script>
       window.addEventListener('DOMContentLoaded', async () => {
         const config = await window.electronAPI.getConfig()
-        document.getElementById('compatdataPath').value = config.compatdataPath
+        document.getElementById('compatdataPaths').value = config.compatdataPaths.join(', ')
       })
 
       document.getElementById('settings-form').addEventListener('submit', async (e) => {
         e.preventDefault()
-        const compatdataPath = document.getElementById('compatdataPath').value
-        await window.electronAPI.saveConfig({ compatdataPath })
+        const compatdataPaths = document.getElementById('compatdataPaths').value.split(',').map(s => s.trim())
+        await window.electronAPI.saveConfig({ compatdataPaths })
         alert('Settings saved!')
         window.close()
       })

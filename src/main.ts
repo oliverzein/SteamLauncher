@@ -2,13 +2,14 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import * as fs from 'fs';
 import * as https from 'https';
+import * as os from 'os';
 import started from 'electron-squirrel-startup';
 import { AppStarter, SteamStarter, Game, Config } from './classes'
 
 let mainWindow: BrowserWindow | null = null
 let steamStarters: SteamStarter[] = []
 let config: Config = {
-  compatdataPath: '/home/oliverzein/.local/share/Steam/steamapps/compatdata/',
+  compatdataPaths: ['~/.local/share/Steam/steamapps/compatdata/'],
   steamApps: []
 }
 
@@ -18,7 +19,13 @@ function loadConfig(): void {
     const configPath = path.join(app.getPath('userData'), 'config.json')
     if (fs.existsSync(configPath)) {
       const data = fs.readFileSync(configPath, 'utf8')
-      config = { ...config, ...JSON.parse(data) }
+      const parsed = JSON.parse(data)
+      // Backward compatibility: convert old compatdataPath to compatdataPaths
+      if (parsed.compatdataPath && !parsed.compatdataPaths) {
+        parsed.compatdataPaths = [parsed.compatdataPath]
+        delete parsed.compatdataPath
+      }
+      config = { ...config, ...parsed }
     }
   } catch (error) {
     console.error('Failed to load config:', error)
@@ -62,41 +69,52 @@ async function fetchAppDetails(steamID: number): Promise<{ name: string; icon?: 
   })
 }
 
-// Scan Steam games
+// Fetch games from all compatdata paths
 async function fetchGames(): Promise<Game[]> {
-  try {
-    console.log('Using compatdata path:', config.compatdataPath)
-    const entries = fs.readdirSync(config.compatdataPath, { withFileTypes: true })
-    console.log('Found', entries.length, 'entries in compatdata')
-    const steamIDs = entries
-      .filter(entry => entry.isDirectory() && entry.name !== '0')
-      .map(entry => parseInt(entry.name))
-      .filter(id => !isNaN(id) && id > 0)
-    console.log('Filtered steamIDs:', steamIDs)
+  const games: Game[] = []
+  const steamIDs = new Set<number>()
 
-    const existingSteamIDs = new Set(config.steamApps.map(app => app.steamID))
+  for (const path of config.compatdataPaths) {
+    try {
+      const fullPath = path.replace('~', os.homedir())
+      console.log(`Using compatdata path: ${fullPath}`)
+      const entries = fs.readdirSync(fullPath)
+      console.log(`Found ${entries.length} entries in compatdata`)
 
-    const defaultUser = config.steamApps[0]?.user || 'default_user'
-    const defaultPassword = config.steamApps[0]?.password || 'default_password'
+      const filteredEntries = entries.filter(entry => /^\d+$/.test(entry))
+      console.log(`Filtered steamIDs: [ ${filteredEntries.join(', ')} ]`)
 
-    const newSteamIDs = steamIDs.filter(id => !existingSteamIDs.has(id))
-    const details = await Promise.all(newSteamIDs.map(fetchAppDetails))
-    details.forEach((detail, i) => {
-      config.steamApps.push({
-        name: detail.name,
-        icon: detail.icon,
-        user: defaultUser,
-        password: defaultPassword,
-        steamID: newSteamIDs[i]
-      })
-    })
+      for (const entry of filteredEntries) {
+        const steamID = parseInt(entry)
+        if (steamID > 0 && steamID !== 1493710 && !steamIDs.has(steamID)) {
+          steamIDs.add(steamID)
 
-    saveConfig()
-    return config.steamApps
-  } catch (error) {
-    console.error('Failed to fetch games:', error)
-    return config.steamApps
+          // Find existing game config or create default
+          let gameConfig = config.steamApps.find(g => g.steamID === steamID)
+          if (!gameConfig) {
+            gameConfig = {
+              name: `Game ${steamID}`,
+              user: 'default_user',
+              password: 'default_password',
+              steamID: steamID
+            }
+            config.steamApps.push(gameConfig)
+          }
+
+          // Fetch latest game details
+          const details = await fetchAppDetails(steamID)
+          gameConfig.name = details.name
+          gameConfig.icon = details.icon
+
+          games.push(gameConfig)
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to read compatdata path ${path}:`, error)
+    }
   }
+
+  return games
 }
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.

@@ -72,7 +72,7 @@ interface Game {
 }
 
 interface Config {
-  compatdataPath: string
+  compatdataPaths: string[]
   steamApps: Game[]
 }
 
