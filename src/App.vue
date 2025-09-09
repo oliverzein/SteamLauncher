@@ -52,7 +52,6 @@ onMounted(() => {
   window.electronAPI.onGamesLoaded((loadedGames: Game[]) => {
     games.value = loadedGames
     loading.value = false
-    console.log(games.value)
   })
 })
 
