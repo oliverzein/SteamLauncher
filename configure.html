@@ -22,7 +22,7 @@
       </label>
       <label>
         Password:
-        <input type="password" id="password">
+        <input type="password" id="password" placeholder="Leave blank to keep existing">
       </label>
       <button type="submit">Save</button>
     </form>
@@ -31,7 +31,8 @@
       window.addEventListener('DOMContentLoaded', () => {
         window.electronAPI.onConfigureGame((game, index) => {
           document.getElementById('username').value = game.user
-          document.getElementById('password').value = game.password
+          // Do not prefill password; we don't read secrets from keychain
+          document.getElementById('password').value = ''
           window.gameIndex = index
           document.title = game.name + ' - Configure'
         })
@@ -45,6 +46,8 @@
         alert('Configuration saved!')
         window.close()
       })
+
+      // No debug password retrieval in production
     </script>
   </body>
 </html>

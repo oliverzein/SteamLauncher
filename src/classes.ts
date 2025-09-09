@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from 'child_process'
+import path from 'node:path'
 
 // ##############
 // Classes
@@ -42,19 +43,49 @@ class AppStarter {
 
 class SteamStarter extends AppStarter {
   user: string
-  password: string
-  steamID?: number
+  steamID: number
 
-  constructor(user: string, password: string, steamID: number | null, executablePath: string) {
-    const executableArgs: string[] = ['-login', user, password]
-    if (steamID != null) {
-      executableArgs.push('-applaunch', steamID.toString())
-    }
-    super(executablePath, executableArgs)
+  constructor(user: string, steamID: number, executablePath: string) {
+    // will populate args at execute time once password is fetched from keytar
+    super(executablePath, [])
     this.user = user
-    this.password = password
-    if (steamID != null) {
-      this.steamID = steamID
+    this.steamID = steamID
+  }
+
+  async execute(): Promise<ExecutionResult> {
+    try {
+      // Load keytar at runtime with fallback to unpacked path in production
+      let keytar: { getPassword: (service: string, account: string) => Promise<string | null> }
+      try {
+        keytar = (eval('require') as NodeRequire)('keytar')
+      } catch {
+        try {
+          const altUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
+          keytar = (eval('require') as NodeRequire)(altUnpacked)
+        } catch {
+          try {
+            const altResources = path.join(process.resourcesPath, 'keytar')
+            keytar = (eval('require') as NodeRequire)(altResources)
+          } catch {
+            const altNodeModules = path.join(process.resourcesPath, 'node_modules', 'keytar')
+            keytar = (eval('require') as NodeRequire)(altNodeModules)
+          }
+        }
+      }
+      const account = `${this.user}:${this.steamID}`
+      const password = await keytar.getPassword('steamlauncher', account)
+      if (!password) {
+        return { success: false, error: 'No password stored for this game/user. Please configure credentials.' }
+      }
+      this.executableArgs = ['-login', this.user, password, '-applaunch', this.steamID.toString()]
+      const child: ChildProcess = spawn(this.executablePath, this.executableArgs, { stdio: 'inherit' })
+      // Mask password in logs
+      const maskedArgs = ['-login', this.user, '********', '-applaunch', this.steamID.toString()]
+      console.log(`Started executable: ${this.executablePath} with args: ${maskedArgs.join(' ')}`)
+      return { success: true, pid: child.pid }
+    } catch (error) {
+      console.error('Failed to start executable:', error)
+      return { success: false, error: (error as Error).message }
     }
   }
 }
@@ -67,7 +98,6 @@ interface Game {
   name: string
   icon?: string
   user: string
-  password: string
   steamID: number
   hidden?: boolean
 }

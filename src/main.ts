@@ -32,11 +32,21 @@ function loadConfig(): void {
   }
 }
 
-// Save config to file
+// Save config to file (sanitize legacy password fields)
 function saveConfig(): void {
   try {
     const configPath = path.join(app.getPath('userData'), 'config.json')
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+    const sanitized = {
+      ...config,
+      steamApps: config.steamApps.map(g => ({
+        name: g.name,
+        icon: g.icon,
+        user: g.user,
+        steamID: g.steamID,
+        hidden: g.hidden ?? false,
+      })),
+    }
+    fs.writeFileSync(configPath, JSON.stringify(sanitized, null, 2))
   } catch (error) {
     console.error('Failed to save config:', error)
   }
@@ -95,7 +105,6 @@ async function fetchGames(): Promise<Game[]> {
             gameConfig = {
               name: `Game ${steamID}`,
               user: 'default_user',
-              password: 'default_password',
               steamID: steamID,
               hidden: false
             }
@@ -201,7 +210,7 @@ const createWindow = () => {
 app.whenReady().then(async () => {
   loadConfig()
   const games = await fetchGames()
-  steamStarters = games.map(game => new SteamStarter(game.user, game.password, game.steamID, 'steam'))
+  steamStarters = games.map(game => new SteamStarter(game.user, game.steamID, 'steam'))
 
   createWindow()
 
@@ -247,7 +256,7 @@ ipcMain.handle('save-config', async (event, newConfig) => {
   config = { ...config, ...newConfig }
   saveConfig()
   const games = await fetchGames()
-  steamStarters = games.map(game => new SteamStarter(game.user, game.password, game.steamID, 'steam'))
+  steamStarters = games.map(game => new SteamStarter(game.user, game.steamID, 'steam'))
   if (mainWindow) {
     mainWindow.webContents.send('games-loaded', games)
   }
@@ -276,8 +285,24 @@ ipcMain.handle('save-game-config', async (event, index: number, user: string, pa
   if (typeof user !== 'string' || typeof password !== 'string') {
     return { success: false, error: 'Invalid credentials type' }
   }
+  const steamID = config.steamApps[index].steamID
+  // Update user in config
   config.steamApps[index].user = user
-  config.steamApps[index].password = password
+  // If a non-empty password is provided, store it securely in keytar
+  if (password && password.length > 0) {
+    try {
+      let keytar: { setPassword: (service: string, account: string, password: string) => Promise<void> }
+      try {
+        keytar = (eval('require') as NodeRequire)('keytar')
+      } catch {
+        const altPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
+        keytar = (eval('require') as NodeRequire)(altPath)
+      }
+      await keytar.setPassword('steamlauncher', `${user}:${steamID}`, password)
+    } catch (e) {
+      return { success: false, error: 'Failed to store password in keychain' }
+    }
+  }
   saveConfig()
   // Notify all windows of config update
   BrowserWindow.getAllWindows().forEach(win => {

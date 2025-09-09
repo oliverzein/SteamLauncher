@@ -10,7 +10,6 @@ interface Game {
   name: string
   icon?: string
   user: string
-  password: string
   steamID: number
   hidden?: boolean
 }
@@ -52,6 +51,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Save game configuration
   saveGameConfig: (index: number, user: string, password: string): Promise<void> => 
     ipcRenderer.invoke('save-game-config', index, user, password),
+
   
   // Toggle hidden status of a game
   toggleHidden: (steamID: number): Promise<void> => 
