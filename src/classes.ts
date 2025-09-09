@@ -69,6 +69,7 @@ interface Game {
   user: string
   password: string
   steamID: number
+  hidden?: boolean
 }
 
 interface Config {

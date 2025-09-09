@@ -29,11 +29,10 @@
           />
           <div class="game-info">
             <span class="game-title">{{ game.name }}</span>
-            <button @click="configureGame(index)" class="game-settings-icon">⚙️</button>
-            <!--<h3 class="title-row">
-              <span class="game-title">{{ game.name }}</span>
-              <div class="game-settings-icon" @click.stop="configureGame(index)">⚙️</div>
-            </h3>-->
+            <div class="game-actions">
+              <button @click="toggleHidden(index)" :title="game.hidden ? 'Unhide game' : 'Hide game'" class="game-hide-icon">{{ game.hidden ? '👁️‍🗨️' : '👁️' }}</button>
+              <button @click="configureGame(index)" class="game-settings-icon">⚙️</button>
+            </div>
           </div>
         </div>
       </div>
@@ -53,6 +52,7 @@ onMounted(() => {
   window.electronAPI.onGamesLoaded((loadedGames: Game[]) => {
     games.value = loadedGames
     loading.value = false
+    console.log(games.value)
   })
 })
 
@@ -81,7 +81,15 @@ const openSettings = async () => {
 }
 
 const configureGame = async (index: number) => {
-  await window.electronAPI.openConfigure(index)
+  await window.electronAPI.openConfigure(games.value[index].steamID)
+}
+
+const toggleHidden = async (index: number) => {
+  try {
+    await window.electronAPI.toggleHidden(games.value[index].steamID)
+  } catch (error) {
+    console.error('Toggle hidden error:', error)
+  }
 }
 </script>
 
@@ -185,11 +193,24 @@ body {
   padding: 0.5rem;
 }
 
-.game-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0;
-  flex: 1;
+.game-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.game-hide-icon {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 1.0rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  display: block;
+}
+
+.game-hide-icon:hover {
+  transform: scale(1.5);
 }
 
 .game-icon {

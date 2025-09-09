@@ -96,7 +96,8 @@ async function fetchGames(): Promise<Game[]> {
               name: `Game ${steamID}`,
               user: 'default_user',
               password: 'default_password',
-              steamID: steamID
+              steamID: steamID,
+              hidden: false
             }
             config.steamApps.push(gameConfig)
           }
@@ -106,7 +107,9 @@ async function fetchGames(): Promise<Game[]> {
           gameConfig.name = details.name
           gameConfig.icon = details.icon
 
-          games.push(gameConfig)
+          if (!gameConfig.hidden) {
+            games.push(gameConfig)
+          }
         }
       }
     } catch (error) {
@@ -124,8 +127,8 @@ if (started) {
 
 const createSettingsWindow = () => {
   const settingsWin = new BrowserWindow({
-    width: 500,
-    height: 300,
+    width: 600,
+    height: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
@@ -135,15 +138,18 @@ const createSettingsWindow = () => {
 
 const createConfigureWindow = (index: number) => {
   const configureWin = new BrowserWindow({
-    width: 500,
+    width: 600,
     height: 300,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
   })
-  configureWin.loadFile(path.join(process.cwd(), 'configure.html'))
-  configureWin.webContents.once('did-finish-load', () => {
-    configureWin.webContents.send('configure-game', config.steamApps[index], index)
+  configureWin.loadFile('configure.html')
+  configureWin.show()
+  configureWin.focus()
+  configureWin.webContents.on('did-finish-load', () => {
+    const game = config.steamApps[index]
+    configureWin.webContents.send('configure-game', game, index)
   })
 }
 
@@ -209,15 +215,42 @@ ipcMain.handle('save-config', async (event, newConfig) => {
   }
 })
 
-ipcMain.handle('open-configure', async (event, index: number) => {
+ipcMain.handle('open-configure', async (event, steamID: number) => {
+  const index = config.steamApps.findIndex(g => g.steamID === steamID)
   createConfigureWindow(index)
 })
 
 ipcMain.handle('save-game-config', async (event, index: number, user: string, password: string) => {
-  config.steamApps[index].user = user
-  config.steamApps[index].password = password
-  saveConfig()
-  steamStarters[index] = new SteamStarter(user, password, config.steamApps[index].steamID, 'steam')
+  if (index >= 0 && index < config.steamApps.length) {
+    config.steamApps[index].user = user
+    config.steamApps[index].password = password
+    saveConfig()
+    // Notify all windows of config update
+    BrowserWindow.getAllWindows().forEach(win => {
+      win.webContents.send('config-updated')
+    })
+  }
+})
+
+ipcMain.handle('toggle-hidden', async (event, steamID: number) => {
+  const index = config.steamApps.findIndex(g => g.steamID === steamID)
+  if (index >= 0 && index < config.steamApps.length) {
+    const game = config.steamApps[index]
+    game.hidden = !game.hidden
+    saveConfig()
+    // Reload games to update the list
+    const updatedGames = await fetchGames()
+    mainWindow?.webContents.send('games-loaded', updatedGames)
+    // Notify all windows of config update
+    BrowserWindow.getAllWindows().forEach(win => {
+      win.webContents.send('config-updated')
+    })
+  }
+})
+
+// Get all games including hidden ones
+ipcMain.handle('get-all-games', () => {
+  return config.steamApps
 })
 
 ipcMain.handle('open-settings', async () => {

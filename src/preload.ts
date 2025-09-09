@@ -12,6 +12,7 @@ interface Game {
   user: string
   password: string
   steamID: number
+  hidden?: boolean
 }
 
 interface Config {
@@ -44,13 +45,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // Open configure window for a game
-  openConfigure: (index: number): Promise<void> => 
-    ipcRenderer.invoke('open-configure', index),
+  openConfigure: (steamID: number): Promise<void> => 
+    ipcRenderer.invoke('open-configure', steamID),
   
   // Save game configuration
   saveGameConfig: (index: number, user: string, password: string): Promise<void> => 
     ipcRenderer.invoke('save-game-config', index, user, password),
   
+  // Toggle hidden status of a game
+  toggleHidden: (steamID: number): Promise<void> => 
+    ipcRenderer.invoke('toggle-hidden', steamID),
+  
+  // Get all games including hidden ones
+  getAllGames: (): Promise<Game[]> => 
+    ipcRenderer.invoke('get-all-games'),
+  
+  // Listen for config updated event
+  onConfigUpdated: (callback: () => void): void => {
+    ipcRenderer.on('config-updated', () => callback())
+  },
+
   // Listen for configure game event
   onConfigureGame: (callback: (game: Game, index: number) => void): void => {
     ipcRenderer.on('configure-game', (event, game: Game, index: number) => callback(game, index))
@@ -66,8 +80,11 @@ declare global {
       saveConfig: (config: Partial<Config>) => Promise<void>
       openSettings: () => Promise<void>
       onGamesLoaded: (callback: (games: Game[]) => void) => void
-      openConfigure: (index: number) => Promise<void>
+      openConfigure: (steamID: number) => Promise<void>
       saveGameConfig: (index: number, user: string, password: string) => Promise<void>
+      toggleHidden: (steamID: number) => Promise<void>
+      getAllGames: () => Promise<Game[]>
+      onConfigUpdated: (callback: () => void) => void
       onConfigureGame: (callback: (game: Game, index: number) => void) => void
     }
   }
