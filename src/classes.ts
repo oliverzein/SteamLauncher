@@ -1,5 +1,9 @@
 import { spawn, ChildProcess } from 'child_process'
 
+// ##############
+// Classes
+// ##############
+
 interface ExecutionResult {
   success: boolean
   pid?: number
@@ -55,4 +59,25 @@ class SteamStarter extends AppStarter {
   }
 }
 
-export { AppStarter, SteamStarter, ExecutionResult, AppConfig }
+// ##############
+// Interfaces
+// ##############
+
+interface Game {
+  name: string
+  icon?: string
+  user: string
+  password: string
+  steamID: number
+}
+
+interface Config {
+  compatdataPath: string
+  steamApps: Game[]
+}
+
+// ##############
+// Exports
+// ##############
+
+export { AppStarter, SteamStarter, ExecutionResult, AppConfig, Game, Config }

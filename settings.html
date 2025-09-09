@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: white; }
+      form { max-width: 400px; margin: 0 auto; }
+      label { display: block; margin-bottom: 10px; }
+      input { width: 100%; padding: 8px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; }
+      button { padding: 10px 20px; background: #444; color: white; border: none; cursor: pointer; border-radius: 4px; margin-top: 10px; }
+      button:hover { background: #555; }
+    </style>
+  </head>
+  <body>
+    <h1>Settings</h1>
+    <form id="settings-form">
+      <label>
+        Steam Compatdata Path:
+        <input type="text" id="compatdataPath">
+      </label>
+      <button type="submit">Save</button>
+    </form>
+
+    <script>
+      window.addEventListener('DOMContentLoaded', async () => {
+        const config = await window.electronAPI.getConfig()
+        document.getElementById('compatdataPath').value = config.compatdataPath
+      })
+
+      document.getElementById('settings-form').addEventListener('submit', async (e) => {
+        e.preventDefault()
+        const compatdataPath = document.getElementById('compatdataPath').value
+        await window.electronAPI.saveConfig({ compatdataPath })
+        alert('Settings saved!')
+        window.close()
+      })
+    </script>
+  </body>
+</html>
