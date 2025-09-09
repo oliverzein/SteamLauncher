@@ -131,6 +131,9 @@ const createSettingsWindow = () => {
     height: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
     },
   })
   settingsWin.loadFile(path.join(process.cwd(), 'settings.html'))
@@ -142,6 +145,9 @@ const createConfigureWindow = (index: number) => {
     height: 300,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
     },
   })
   configureWin.loadFile('configure.html')
@@ -160,6 +166,9 @@ const createWindow = () => {
     height: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
     },
   });
 
@@ -170,8 +179,10 @@ const createWindow = () => {
     mainWindow.loadFile(path.join(__dirname, '../index.html'));
   }
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  // Open DevTools only in development
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    mainWindow.webContents.openDevTools();
+  }
 };
 
 // This method will be called when Electron has finished
