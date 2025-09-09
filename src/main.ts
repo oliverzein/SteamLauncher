@@ -136,7 +136,8 @@ const createSettingsWindow = () => {
       nodeIntegration: false,
     },
   })
-  settingsWin.loadFile(path.join(process.cwd(), 'settings.html'))
+  // In production, __dirname points to .vite/build; settings.html is one level up in asar
+  settingsWin.loadFile(path.join(__dirname, '../settings.html'))
 }
 
 const createConfigureWindow = (index: number) => {
@@ -150,7 +151,8 @@ const createConfigureWindow = (index: number) => {
       nodeIntegration: false,
     },
   })
-  configureWin.loadFile('configure.html')
+  // In production, resolve relative to built main folder
+  configureWin.loadFile(path.join(__dirname, '../configure.html'))
   configureWin.show()
   configureWin.focus()
   configureWin.webContents.on('did-finish-load', () => {
@@ -176,7 +178,9 @@ const createWindow = () => {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../index.html'));
+    // Use the renderer output folder provided by Forge Vite plugin
+    // MAIN_WINDOW_VITE_NAME is injected at build time
+    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
   }
 
   // Open DevTools only in development
