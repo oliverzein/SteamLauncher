@@ -16,7 +16,8 @@ interface Game {
 }
 
 interface Config {
-  compatdataPath: string
+  // Unified to array to support multiple Proton compatdata directories
+  compatdataPaths: string[]
   steamApps: Game[]
 }
 
