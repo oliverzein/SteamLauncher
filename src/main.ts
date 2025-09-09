@@ -136,8 +136,11 @@ const createSettingsWindow = () => {
       nodeIntegration: false,
     },
   })
-  // In production, __dirname points to .vite/build; settings.html is one level up in asar
-  settingsWin.loadFile(path.join(__dirname, '../settings.html'))
+  // Resolve settings.html path for dev vs prod (extraResource in prod)
+  const settingsPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'settings.html')
+    : path.join(process.cwd(), 'settings.html')
+  settingsWin.loadFile(settingsPath)
 }
 
 const createConfigureWindow = (index: number) => {
@@ -151,8 +154,11 @@ const createConfigureWindow = (index: number) => {
       nodeIntegration: false,
     },
   })
-  // In production, resolve relative to built main folder
-  configureWin.loadFile(path.join(__dirname, '../configure.html'))
+  // Resolve configure.html path for dev vs prod (extraResource in prod)
+  const configurePath = app.isPackaged
+    ? path.join(process.resourcesPath, 'configure.html')
+    : path.join(process.cwd(), 'configure.html')
+  configureWin.loadFile(configurePath)
   configureWin.show()
   configureWin.focus()
   configureWin.webContents.on('did-finish-load', () => {
