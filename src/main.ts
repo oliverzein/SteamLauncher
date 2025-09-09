@@ -215,7 +215,17 @@ app.whenReady().then(async () => {
 // IPC handlers
 ipcMain.handle('start-game', async (event, index: number) => {
   try {
-    const result = await steamStarters[index].execute()
+    if (typeof index !== 'number' || !Number.isInteger(index)) {
+      return { success: false, error: 'Invalid index type' }
+    }
+    if (index < 0 || index >= steamStarters.length) {
+      return { success: false, error: 'Index out of range' }
+    }
+    const starter = steamStarters[index]
+    if (!starter) {
+      return { success: false, error: 'Game starter not available' }
+    }
+    const result = await starter.execute()
     return result
   } catch (error) {
     return { success: false, error: (error as Error).message }
@@ -227,6 +237,13 @@ ipcMain.handle('get-config', async () => {
 })
 
 ipcMain.handle('save-config', async (event, newConfig) => {
+  // Basic validation for compatdataPaths if present
+  if (newConfig && Array.isArray(newConfig.compatdataPaths)) {
+    const valid = newConfig.compatdataPaths.every((p: unknown) => typeof p === 'string' && p.length > 0)
+    if (!valid) {
+      return { success: false, error: 'compatdataPaths must be a non-empty array of strings' }
+    }
+  }
   config = { ...config, ...newConfig }
   saveConfig()
   const games = await fetchGames()
@@ -234,39 +251,60 @@ ipcMain.handle('save-config', async (event, newConfig) => {
   if (mainWindow) {
     mainWindow.webContents.send('games-loaded', games)
   }
+  return { success: true }
 })
 
 ipcMain.handle('open-configure', async (event, steamID: number) => {
+  if (typeof steamID !== 'number' || !Number.isInteger(steamID) || steamID <= 0) {
+    return { success: false, error: 'Invalid steamID' }
+  }
   const index = config.steamApps.findIndex(g => g.steamID === steamID)
+  if (index === -1) {
+    return { success: false, error: 'Game not found' }
+  }
   createConfigureWindow(index)
+  return { success: true }
 })
 
 ipcMain.handle('save-game-config', async (event, index: number, user: string, password: string) => {
-  if (index >= 0 && index < config.steamApps.length) {
-    config.steamApps[index].user = user
-    config.steamApps[index].password = password
-    saveConfig()
-    // Notify all windows of config update
-    BrowserWindow.getAllWindows().forEach(win => {
-      win.webContents.send('config-updated')
-    })
+  if (typeof index !== 'number' || !Number.isInteger(index)) {
+    return { success: false, error: 'Invalid index type' }
   }
+  if (index < 0 || index >= config.steamApps.length) {
+    return { success: false, error: 'Index out of range' }
+  }
+  if (typeof user !== 'string' || typeof password !== 'string') {
+    return { success: false, error: 'Invalid credentials type' }
+  }
+  config.steamApps[index].user = user
+  config.steamApps[index].password = password
+  saveConfig()
+  // Notify all windows of config update
+  BrowserWindow.getAllWindows().forEach(win => {
+    win.webContents.send('config-updated')
+  })
+  return { success: true }
 })
 
 ipcMain.handle('toggle-hidden', async (event, steamID: number) => {
-  const index = config.steamApps.findIndex(g => g.steamID === steamID)
-  if (index >= 0 && index < config.steamApps.length) {
-    const game = config.steamApps[index]
-    game.hidden = !game.hidden
-    saveConfig()
-    // Reload games to update the list
-    const updatedGames = await fetchGames()
-    mainWindow?.webContents.send('games-loaded', updatedGames)
-    // Notify all windows of config update
-    BrowserWindow.getAllWindows().forEach(win => {
-      win.webContents.send('config-updated')
-    })
+  if (typeof steamID !== 'number' || !Number.isInteger(steamID) || steamID <= 0) {
+    return { success: false, error: 'Invalid steamID' }
   }
+  const index = config.steamApps.findIndex(g => g.steamID === steamID)
+  if (index === -1) {
+    return { success: false, error: 'Game not found' }
+  }
+  const game = config.steamApps[index]
+  game.hidden = !game.hidden
+  saveConfig()
+  // Reload games to update the list
+  const updatedGames = await fetchGames()
+  mainWindow?.webContents.send('games-loaded', updatedGames)
+  // Notify all windows of config update
+  BrowserWindow.getAllWindows().forEach(win => {
+    win.webContents.send('config-updated')
+  })
+  return { success: true }
 })
 
 // Get all games including hidden ones
