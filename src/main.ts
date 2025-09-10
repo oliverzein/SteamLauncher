@@ -8,7 +8,7 @@ declare const SETTINGS_WINDOW_VITE_NAME: string
 declare const CONFIGURE_WINDOW_VITE_DEV_SERVER_URL: string | undefined
 // @ts-ignore
 declare const CONFIGURE_WINDOW_VITE_NAME: string
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, globalShortcut } from 'electron';
 import { exec } from 'child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -153,6 +153,7 @@ const createSettingsWindow = () => {
     width: 600,
     height: 600,
     icon: getAppIconPath(),
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -177,6 +178,7 @@ const createConfigureWindow = (index: number) => {
     width: 600,
     height: 300,
     icon: getAppIconPath(),
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -221,9 +223,10 @@ function getAppIconPath(): string | undefined {
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 1600,
+    width: 1416,
     height: 600,
     icon: getAppIconPath(),
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -243,7 +246,7 @@ const createWindow = () => {
 
   // Open DevTools only in development
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    mainWindow.webContents.openDevTools();
+    //mainWindow.webContents.openDevTools();
   }
 };
 
@@ -251,6 +254,21 @@ const createWindow = () => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
+  // Remove default application menu
+  Menu.setApplicationMenu(null)
+  // Register global shortcuts to toggle DevTools
+  const registerDevtoolsShortcuts = () => {
+    const toggleFocusedDevTools = () => {
+      const win = BrowserWindow.getFocusedWindow()
+      if (win) {
+        if (win.webContents.isDevToolsOpened()) win.webContents.closeDevTools()
+        else win.webContents.openDevTools({ mode: 'detach' })
+      }
+    }
+    globalShortcut.register('CommandOrControl+Shift+I', toggleFocusedDevTools)
+    globalShortcut.register('F12', toggleFocusedDevTools)
+  }
+  registerDevtoolsShortcuts()
   loadConfig()
   const games = await fetchGames()
   steamStarters = games.map(game => new SteamStarter(game.user, game.steamID, 'steam'))
@@ -526,6 +544,11 @@ app.on('activate', () => {
     createWindow();
   }
 });
+
+// Unregister all shortcuts on quit
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+})
 
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.

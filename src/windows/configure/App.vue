@@ -1,6 +1,5 @@
 <template>
   <div class="wrap">
-    <h2>Configure Game</h2>
 
     <div class="row">
       <label>Username</label>
@@ -89,9 +88,8 @@ const closeWin = () => window.close()
 <style scoped>
 .wrap {
   padding: 16px;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  color: #eee;
-  background: #222;
+  color: var(--text-color);
+  background: var(--bg-color);
   min-height: 100vh;
 }
 .row { margin-bottom: 10px; }
@@ -100,16 +98,16 @@ input {
   width: 100%;
   padding: 6px;
   border-radius: 4px;
-  border: 1px solid #555;
-  background: #111;
-  color: #eee;
+  border: 1px solid var(--border-color);
+  background: var(--surface-2);
+  color: var(--text-color);
 }
 .password-row { display: flex; gap: 8px; }
 .password-row input { flex: 1; }
 .toggle { padding: 6px 10px; }
-.error { color: #ffb3b3; margin: 4px 0 0; font-size: 0.9em; }
-.invalid { border-color: #cc6666; }
-.hint { color: #bbb; margin: 4px 0 0; font-size: 0.85em; }
+.error { color: var(--danger); margin: 4px 0 0; font-size: 0.9em; }
+.invalid { border-color: var(--danger); }
+.hint { color: var(--muted-text); margin: 4px 0 0; font-size: 0.85em; }
 .actions { display: flex; gap: 8px; }
 button { padding: 6px 10px; }
 </style>

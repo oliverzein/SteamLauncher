@@ -1,6 +1,5 @@
 <template>
   <div class="wrap">
-    <h2>Settings</h2>
     <p>Compatdata paths (one per line):</p>
     <div v-for="(p,i) in compatdataPaths" :key="i" class="row">
       <input v-model="compatdataPaths[i]" placeholder="/home/user/.local/share/Steam/steamapps/compatdata" />
@@ -73,9 +72,8 @@ const unhide = async (steamID: number) => {
 <style scoped>
 .wrap {
   padding: 16px;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  color: #eee;
-  background: #222;
+  color: var(--text-color);
+  background: var(--bg-color);
   min-height: 100vh;
 }
 .row { margin-bottom: 8px; }
@@ -83,16 +81,16 @@ input {
   width: 100%;
   padding: 6px;
   border-radius: 4px;
-  border: 1px solid #555;
-  background: #111;
-  color: #eee;
+  border: 1px solid var(--border-color);
+  background: var(--surface-2);
+  color: var(--text-color);
 }
 .actions { display: flex; gap: 8px; }
 button { padding: 6px 10px; }
-.divider { margin: 16px 0; border: none; height: 1px; background: #444; }
-.muted { color: #bbb; }
+.divider { margin: 16px 0; border: none; height: 1px; background: var(--border-color); }
+.muted { color: var(--muted-text); }
 .hidden-list { list-style: none; padding: 0; margin: 8px 0 0; }
-.hidden-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border: 1px solid #444; border-radius: 6px; margin-bottom: 8px; background: #1a1a1a; }
+.hidden-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border: 1px solid var(--border-color); border-radius: 6px; margin-bottom: 8px; background: var(--surface-1); }
 .title { font-weight: 600; }
 .unhide { padding: 4px 8px; }
 </style>

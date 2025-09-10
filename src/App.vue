@@ -128,27 +128,10 @@ const isLaunching = (index: number) => launching.value.has(index)
 </script>
 
 <style>
-/* Dark theme variables */
-:root {
-  --bg-color: #1a1a1a;
-  --card-bg: #2a2a2a;
-  --text-color: #ffffff;
-  --accent-color: #444444;
-  --hover-color: #555555;
-  --border-color: #333333;
-}
-
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-}
-
-body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: var(--bg-color);
-  color: var(--text-color);
-  overflow-x: hidden;
 }
 
 .main {
@@ -167,9 +150,9 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  background-color: var(--card-bg);
+  background-color: var(--surface-2);
   border-bottom: 1px solid var(--border-color);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
 }
 
 .header h1 {
@@ -191,18 +174,9 @@ body {
 }
 
 .app-settings-btn:hover {
-  background-color: var(--accent-color);
+  background-color: var(--accent-weak);
 }
 
-.start-steam-icon {
-  background: none;
-  border: none;
-  color: var(--text-color);
-  font-size: 1rem;
-  cursor: pointer;
-}
-.start-steam-icon img { width: 1.1rem; height: 1.1rem; display: block; }
-.start-steam-icon:hover { filter: brightness(1.2); }
 
 .loading, .no-games {
   text-align: center;
@@ -218,10 +192,11 @@ body {
 }
 
 .game-card {
-  background-color: var(--card-bg);
+  background-color: var(--surface-1);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-color);
   transition: transform 0.2s, box-shadow 0.2s;
   cursor: pointer;
   position: relative;
@@ -229,7 +204,7 @@ body {
 
 .game-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 }
 
 .game-info {
@@ -244,6 +219,13 @@ body {
   gap: 0.5rem;
 }
 
+.game-icon {
+  width: 320px;
+  object-fit: contain;
+  display: block;
+  background-color: var(--surface-1);
+}
+
 .game-hide-icon {
   background: none;
   border: none;
@@ -254,17 +236,7 @@ body {
   transition: background-color 0.2s;
   display: block;
 }
-
-.game-hide-icon:hover {
-  transform: scale(1.5);
-}
-
-.game-icon {
-  width: 320px;
-  object-fit: contain;
-  display: block;
-  background-color: var(--card-bg);
-}
+.game-hide-icon:hover { filter: brightness(1.2); }
 
 .game-settings-icon {
   background: none;
@@ -272,14 +244,18 @@ body {
   color: var(--text-color);
   font-size: 1.0rem;
   cursor: pointer;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-  display: block;
 }
+.game-settings-icon:hover { filter: brightness(1.2); }
 
-.game-settings-icon:hover {
-  transform: scale(1.5);
+.start-steam-icon {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 1rem;
+  cursor: pointer;
 }
+.start-steam-icon img { width: 1.1rem; height: 1.1rem; display: block; }
+.start-steam-icon:hover { filter: brightness(1.2); }
 
 .launching-overlay {
   position: absolute;
