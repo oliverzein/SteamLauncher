@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'child_process'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 
 // ##############
 // Classes
@@ -57,18 +58,22 @@ class SteamStarter extends AppStarter {
       // Load keytar at runtime with fallback to unpacked path in production
       let keytar: { getPassword: (service: string, account: string) => Promise<string | null> }
       try {
-        keytar = (eval('require') as NodeRequire)('keytar')
+        const require = createRequire(__filename)
+        keytar = require('keytar')
       } catch {
         try {
           const altUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
-          keytar = (eval('require') as NodeRequire)(altUnpacked)
+          const require = createRequire(__filename)
+          keytar = require(altUnpacked)
         } catch {
           try {
             const altResources = path.join(process.resourcesPath, 'keytar')
-            keytar = (eval('require') as NodeRequire)(altResources)
+            const require = createRequire(__filename)
+            keytar = require(altResources)
           } catch {
             const altNodeModules = path.join(process.resourcesPath, 'node_modules', 'keytar')
-            keytar = (eval('require') as NodeRequire)(altNodeModules)
+            const require = createRequire(__filename)
+            keytar = require(altNodeModules)
           }
         }
       }
@@ -85,6 +90,48 @@ class SteamStarter extends AppStarter {
       return { success: true, pid: child.pid }
     } catch (error) {
       console.error('Failed to start executable:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  }
+
+  // Start Steam for this account without launching the game (omit -applaunch)
+  async executeSteamOnly(): Promise<ExecutionResult> {
+    try {
+      // Load keytar at runtime with fallback to unpacked path in production
+      let keytar: { getPassword: (service: string, account: string) => Promise<string | null> }
+      try {
+        const require = createRequire(__filename)
+        keytar = require('keytar')
+      } catch {
+        try {
+          const altUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
+          const require = createRequire(__filename)
+          keytar = require(altUnpacked)
+        } catch {
+          try {
+            const altResources = path.join(process.resourcesPath, 'keytar')
+            const require = createRequire(__filename)
+            keytar = require(altResources)
+          } catch {
+            const altNodeModules = path.join(process.resourcesPath, 'node_modules', 'keytar')
+            const require = createRequire(__filename)
+            keytar = require(altNodeModules)
+          }
+        }
+      }
+      const account = `${this.user}:${this.steamID}`
+      const password = await keytar.getPassword('steamlauncher', account)
+      if (!password) {
+        return { success: false, error: 'No password stored for this game/user. Please configure credentials.' }
+      }
+      this.executableArgs = ['-login', this.user, password]
+      const child: ChildProcess = spawn(this.executablePath, this.executableArgs, { stdio: 'inherit' })
+      // Mask password in logs
+      const maskedArgs = ['-login', this.user, '********']
+      console.log(`Started executable (Steam only): ${this.executablePath} with args: ${maskedArgs.join(' ')}`)
+      return { success: true, pid: child.pid }
+    } catch (error) {
+      console.error('Failed to start Steam only:', error)
       return { success: false, error: (error as Error).message }
     }
   }

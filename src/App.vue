@@ -2,7 +2,9 @@
   <div id="app" class="app">
     <header class="header">
       <h1>Steam Game Launcher</h1>
-      <button @click="openSettings" class="app-settings-btn">⚙️</button>
+      <div class="header-actions">
+        <button @click="openSettings" class="app-settings-btn" title="Settings">⚙️</button>
+      </div>
     </header>
     
     <main class="main">
@@ -30,6 +32,9 @@
           <div class="game-info">
             <span class="game-title">{{ game.name }}</span>
             <div class="game-actions">
+              <button @click.stop="startSteamOnly(index)" title="Start Steam for this game account" class="start-steam-icon" aria-label="Start Steam">
+                <img :src="steamIcon" alt="Steam" />
+              </button>
               <button @click="toggleHidden(index)" :title="game.hidden ? 'Unhide game' : 'Hide game'" class="game-hide-icon">{{ game.hidden ? '👁️‍🗨️' : '👁️' }}</button>
               <button @click="configureGame(index)" class="game-settings-icon">⚙️</button>
             </div>
@@ -43,6 +48,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { Game } from './classes'
+import steamIcon from '../Steam_icon_logo.svg'
 
 const games = ref<Game[]>([])
 const loading = ref(true)
@@ -88,6 +94,17 @@ const toggleHidden = async (index: number) => {
     await window.electronAPI.toggleHidden(games.value[index].steamID)
   } catch (error) {
     console.error('Toggle hidden error:', error)
+  }
+}
+
+const startSteamOnly = async (index: number) => {
+  try {
+    const result = await window.electronAPI.startSteamOnly(index)
+    if (!result.success) {
+      alert(`Failed to start Steam: ${result.error}`)
+    }
+  } catch (e) {
+    alert('Error starting Steam')
   }
 }
 </script>
@@ -142,11 +159,12 @@ body {
   font-weight: 600;
 }
 
+.header-actions { display: flex; gap: 0.5rem; align-items: center; }
 .app-settings-btn {
   background: none;
   border: none;
   color: var(--text-color);
-  font-size: 1.5rem;
+  font-size: 1rem;
   cursor: pointer;
   padding: 0.5rem;
   border-radius: 4px;
@@ -157,6 +175,16 @@ body {
 .app-settings-btn:hover {
   background-color: var(--accent-color);
 }
+
+.start-steam-icon {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 1rem;
+  cursor: pointer;
+}
+.start-steam-icon img { width: 1.1rem; height: 1.1rem; display: block; }
+.start-steam-icon:hover { filter: brightness(1.2); }
 
 .loading, .no-games {
   text-align: center;

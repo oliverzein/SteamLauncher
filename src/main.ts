@@ -9,6 +9,7 @@ declare const CONFIGURE_WINDOW_VITE_DEV_SERVER_URL: string | undefined
 // @ts-ignore
 declare const CONFIGURE_WINDOW_VITE_NAME: string
 import { app, BrowserWindow, ipcMain } from 'electron';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import * as fs from 'fs';
 import * as https from 'https';
@@ -310,12 +311,23 @@ ipcMain.handle('save-game-config', async (event, index: number, user: string, pa
   // If a non-empty password is provided, store it securely in keytar
   if (password && password.length > 0) {
     try {
+      const req = createRequire(__filename)
       let keytar: { setPassword: (service: string, account: string, password: string) => Promise<void> }
       try {
-        keytar = (eval('require') as NodeRequire)('keytar')
+        keytar = req('keytar')
       } catch {
-        const altPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
-        keytar = (eval('require') as NodeRequire)(altPath)
+        try {
+          const altPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
+          keytar = req(altPath)
+        } catch {
+          try {
+            const altResources = path.join(process.resourcesPath, 'keytar')
+            keytar = req(altResources)
+          } catch {
+            const altNodeModules = path.join(process.resourcesPath, 'node_modules', 'keytar')
+            keytar = req(altNodeModules)
+          }
+        }
       }
       await keytar.setPassword('steamlauncher', `${user}:${steamID}`, password)
     } catch (e) {
@@ -328,6 +340,42 @@ ipcMain.handle('save-game-config', async (event, index: number, user: string, pa
     win.webContents.send('config-updated')
   })
   return { success: true }
+})
+
+// Retrieve stored password for a given (user, steamID)
+ipcMain.handle('get-stored-password', async (event, steamID: number, user: string) => {
+  try {
+    if (typeof steamID !== 'number' || !Number.isInteger(steamID) || steamID <= 0) {
+      return { success: false, error: 'Invalid steamID' }
+    }
+    if (typeof user !== 'string' || user.length === 0) {
+      return { success: false, error: 'Invalid user' }
+    }
+    const req = createRequire(__filename)
+    let keytar: { getPassword: (service: string, account: string) => Promise<string | null> }
+    try {
+      keytar = req('keytar')
+    } catch {
+      try {
+        const altUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
+        keytar = req(altUnpacked)
+      } catch {
+        try {
+          const altResources = path.join(process.resourcesPath, 'keytar')
+          keytar = req(altResources)
+        } catch {
+          const altNodeModules = path.join(process.resourcesPath, 'node_modules', 'keytar')
+          keytar = req(altNodeModules)
+        }
+      }
+    }
+    const account = `${user}:${steamID}`
+    const password = await keytar.getPassword('steamlauncher', account)
+    if (!password) return { success: false, error: 'No password set' }
+    return { success: true, password }
+  } catch (e) {
+    return { success: false, error: 'Failed to retrieve password' }
+  }
 })
 
 ipcMain.handle('toggle-hidden', async (event, steamID: number) => {
@@ -358,6 +406,26 @@ ipcMain.handle('get-all-games', () => {
 
 ipcMain.handle('open-settings', async () => {
   createSettingsWindow()
+})
+
+// Start Steam client only (no -applaunch) for a given game index
+ipcMain.handle('start-steam-only', async (_event, index: number) => {
+  try {
+    if (typeof index !== 'number' || !Number.isInteger(index)) {
+      return { success: false, error: 'Invalid index type' }
+    }
+    if (index < 0 || index >= steamStarters.length) {
+      return { success: false, error: 'Index out of range' }
+    }
+    const starter = steamStarters[index]
+    if (!starter) {
+      return { success: false, error: 'Game starter not available' }
+    }
+    const result = await starter.executeSteamOnly()
+    return result
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
 })
 
 // Quit when all windows are closed, except on macOS. There, it's common
