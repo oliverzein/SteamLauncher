@@ -1,0 +1,4 @@
+- Start steam only (ommit launch parameters)
+- Busy indicator
+  - watch for game process to spawn
+- 
