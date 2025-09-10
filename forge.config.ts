@@ -15,8 +15,6 @@ const config: ForgeConfig = {
       unpackDir: '**/node_modules/keytar/**'
     },
     extraResource: [
-      'settings.html',
-      'configure.html',
       // Ship keytar module alongside resources for reliable runtime resolution
       'node_modules/keytar',
     ],
@@ -46,6 +44,14 @@ const config: ForgeConfig = {
         {
           name: 'main_window',
           config: 'vite.renderer.config.mts',
+        },
+        {
+          name: 'settings_window',
+          config: 'vite.settings.config.mts',
+        },
+        {
+          name: 'configure_window',
+          config: 'vite.configure.config.mts',
         },
       ],
     }),

@@ -1,3 +1,13 @@
+// Ambient declarations for Vite-injected globals (Forge Vite plugin)
+// These will be replaced at build time; in dev they are defined strings.
+// @ts-ignore
+declare const SETTINGS_WINDOW_VITE_DEV_SERVER_URL: string | undefined
+// @ts-ignore
+declare const SETTINGS_WINDOW_VITE_NAME: string
+// @ts-ignore
+declare const CONFIGURE_WINDOW_VITE_DEV_SERVER_URL: string | undefined
+// @ts-ignore
+declare const CONFIGURE_WINDOW_VITE_NAME: string
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import * as fs from 'fs';
@@ -145,11 +155,16 @@ const createSettingsWindow = () => {
       nodeIntegration: false,
     },
   })
-  // Resolve settings.html path for dev vs prod (extraResource in prod)
-  const settingsPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'settings.html')
-    : path.join(process.cwd(), 'settings.html')
-  settingsWin.loadFile(settingsPath)
+  // Load via Vite renderer target
+  // @ts-ignore
+  if (SETTINGS_WINDOW_VITE_DEV_SERVER_URL) {
+    // @ts-ignore
+    settingsWin.loadURL(SETTINGS_WINDOW_VITE_DEV_SERVER_URL)
+  } else {
+    // @ts-ignore
+    const name = SETTINGS_WINDOW_VITE_NAME
+    settingsWin.loadFile(path.join(__dirname, `../renderer/${name}/index.html`))
+  }
 }
 
 const createConfigureWindow = (index: number) => {
@@ -163,11 +178,15 @@ const createConfigureWindow = (index: number) => {
       nodeIntegration: false,
     },
   })
-  // Resolve configure.html path for dev vs prod (extraResource in prod)
-  const configurePath = app.isPackaged
-    ? path.join(process.resourcesPath, 'configure.html')
-    : path.join(process.cwd(), 'configure.html')
-  configureWin.loadFile(configurePath)
+  // @ts-ignore
+  if (CONFIGURE_WINDOW_VITE_DEV_SERVER_URL) {
+    // @ts-ignore
+    configureWin.loadURL(CONFIGURE_WINDOW_VITE_DEV_SERVER_URL)
+  } else {
+    // @ts-ignore
+    const name = CONFIGURE_WINDOW_VITE_NAME
+    configureWin.loadFile(path.join(__dirname, `../renderer/${name}/index.html`))
+  }
   configureWin.show()
   configureWin.focus()
   configureWin.webContents.on('did-finish-load', () => {

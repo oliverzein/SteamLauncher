@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' http://localhost:* 'unsafe-eval' 'wasm-unsafe-eval'; connect-src 'self' http://localhost:* ws://localhost:* blob:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Settings</title>
+  </head>
+  <body>
+    <style>
+      html, body { margin: 0; background: #222; color: #eee; height: 100%; overflow: hidden; }
+      #app { height: 100vh; }
+    </style>
+    <div id="app"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
