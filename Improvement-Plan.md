@@ -20,7 +20,7 @@ This document tracks open improvement items and recommendations. Items are group
 - [x] Start Steam only (omit `-applaunch`)
   - UI action in `src/App.vue`
   - Code path in `SteamStarter.execute()` to launch `steam` without args
-- [ ] Busy indicator while launching and process watch
+- [x] Busy indicator while launching and process watch
   - Show "Launching…" in `src/App.vue`
   - Toggle via IPC when `spawn()` starts and when game process detected
   - Optional timeout + failure toast

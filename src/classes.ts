@@ -147,6 +147,7 @@ interface Game {
   user: string
   steamID: number
   hidden?: boolean
+  processName?: string
 }
 
 interface Config {

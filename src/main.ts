@@ -9,6 +9,7 @@ declare const CONFIGURE_WINDOW_VITE_DEV_SERVER_URL: string | undefined
 // @ts-ignore
 declare const CONFIGURE_WINDOW_VITE_NAME: string
 import { app, BrowserWindow, ipcMain } from 'electron';
+import { exec } from 'child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import * as fs from 'fs';
@@ -55,6 +56,7 @@ function saveConfig(): void {
         user: g.user,
         steamID: g.steamID,
         hidden: g.hidden ?? false,
+        processName: g.processName,
       })),
     }
     fs.writeFileSync(configPath, JSON.stringify(sanitized, null, 2))
@@ -117,7 +119,8 @@ async function fetchGames(): Promise<Game[]> {
               name: `Game ${steamID}`,
               user: 'default_user',
               steamID: steamID,
-              hidden: false
+              hidden: false,
+              processName: undefined,
             }
             config.steamApps.push(gameConfig)
           }
@@ -149,6 +152,7 @@ const createSettingsWindow = () => {
   const settingsWin = new BrowserWindow({
     width: 600,
     height: 600,
+    icon: getAppIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -172,6 +176,7 @@ const createConfigureWindow = (index: number) => {
   const configureWin = new BrowserWindow({
     width: 600,
     height: 300,
+    icon: getAppIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -196,11 +201,29 @@ const createConfigureWindow = (index: number) => {
   })
 }
 
+// Resolve an asset path both in dev and in packaged builds
+function resolveAsset(...segments: string[]): string {
+  const devPath = path.join(__dirname, '..', '..', 'assets', ...segments)
+  const prodPath = path.join(process.resourcesPath, 'assets', ...segments)
+  return fs.existsSync(devPath) ? devPath : prodPath
+}
+
+function getAppIconPath(): string | undefined {
+  // Prefer PNG (SVG is not supported widely for window icons)
+  const pngPath = resolveAsset('app-icon.png')
+  if (fs.existsSync(pngPath)) return pngPath
+  // Fallback to any png in assets dir
+  const altPng = resolveAsset('icon.png')
+  if (fs.existsSync(altPng)) return altPng
+  return undefined
+}
+
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 1600,
     height: 600,
+    icon: getAppIconPath(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -254,9 +277,39 @@ ipcMain.handle('start-game', async (event, index: number) => {
     if (!starter) {
       return { success: false, error: 'Game starter not available' }
     }
+    // Notify renderer: launching started
+    BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-started', index))
     const result = await starter.execute()
+    // Start process watcher; fall back to Steam client if no per-game processName configured
+    const game = config.steamApps[index]
+    const configured = game?.processName?.trim()
+    const procName = configured && configured.length > 0
+      ? configured
+      : (process.platform === 'win32' ? 'steam.exe' : 'steam')
+    if (result.success) {
+      const start = Date.now()
+      const timeoutMs = 60000 // 60s timeout
+      const interval = setInterval(() => {
+        if (Date.now() - start > timeoutMs) {
+          clearInterval(interval)
+          BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+          return
+        }
+        // Use pgrep -f to match full command line
+        exec(`pgrep -f ${JSON.stringify(procName)}`, (err, stdout) => {
+          if (!err && stdout && stdout.trim().length > 0) {
+            clearInterval(interval)
+            BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+          }
+        })
+      }, 1500)
+    } else {
+      // Stop immediately if failed
+      BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+    }
     return result
   } catch (error) {
+    BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
     return { success: false, error: (error as Error).message }
   }
 })
@@ -295,7 +348,7 @@ ipcMain.handle('open-configure', async (event, steamID: number) => {
   return { success: true }
 })
 
-ipcMain.handle('save-game-config', async (event, index: number, user: string, password: string) => {
+ipcMain.handle('save-game-config', async (event, index: number, user: string, password: string, processName?: string) => {
   if (typeof index !== 'number' || !Number.isInteger(index)) {
     return { success: false, error: 'Invalid index type' }
   }
@@ -308,6 +361,11 @@ ipcMain.handle('save-game-config', async (event, index: number, user: string, pa
   const steamID = config.steamApps[index].steamID
   // Update user in config
   config.steamApps[index].user = user
+  // Update processName if provided (allow empty -> undefined)
+  if (typeof processName === 'string') {
+    const pn = processName.trim()
+    config.steamApps[index].processName = pn.length ? pn : undefined
+  }
   // If a non-empty password is provided, store it securely in keytar
   if (password && password.length > 0) {
     try {
@@ -421,9 +479,33 @@ ipcMain.handle('start-steam-only', async (_event, index: number) => {
     if (!starter) {
       return { success: false, error: 'Game starter not available' }
     }
+    // Notify renderer: launching started
+    BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-started', index))
     const result = await starter.executeSteamOnly()
+    // For Steam-only launch, watch the Steam client process rather than the game
+    const procName = process.platform === 'win32' ? 'steam.exe' : 'steam'
+    if (result.success) {
+      const start = Date.now()
+      const timeoutMs = 60000 // 60s timeout
+      const interval = setInterval(() => {
+        if (Date.now() - start > timeoutMs) {
+          clearInterval(interval)
+          BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+          return
+        }
+        exec(`pgrep -f ${JSON.stringify(procName)}`, (err, stdout) => {
+          if (!err && stdout && stdout.trim().length > 0) {
+            clearInterval(interval)
+            BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+          }
+        })
+      }, 1500)
+    } else {
+      BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+    }
     return result
   } catch (e) {
+    BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
     return { success: false, error: (e as Error).message }
   }
 })

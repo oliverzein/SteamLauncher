@@ -39,6 +39,10 @@
               <button @click="configureGame(index)" class="game-settings-icon">⚙️</button>
             </div>
           </div>
+          <div v-if="isLaunching(index)" class="launching-overlay">
+            <div class="spinner"></div>
+            <div class="launching-text">Launching…</div>
+          </div>
         </div>
       </div>
     </main>
@@ -48,16 +52,28 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { Game } from './classes'
-import steamIcon from '../Steam_icon_logo.svg'
+import steamIcon from '../assets/Steam_icon_logo.svg'
 
 const games = ref<Game[]>([])
 const loading = ref(true)
+const launching = ref<Set<number>>(new Set())
 
 onMounted(() => {
   // Listen for games loaded from main process
   window.electronAPI.onGamesLoaded((loadedGames: Game[]) => {
     games.value = loadedGames
     loading.value = false
+  })
+  // Launching state events
+  window.electronAPI.onLaunchingStarted((i: number) => {
+    const next = new Set(launching.value)
+    next.add(i)
+    launching.value = next
+  })
+  window.electronAPI.onLaunchingStopped((i: number) => {
+    const next = new Set(launching.value)
+    next.delete(i)
+    launching.value = next
   })
 })
 
@@ -107,6 +123,8 @@ const startSteamOnly = async (index: number) => {
     alert('Error starting Steam')
   }
 }
+
+const isLaunching = (index: number) => launching.value.has(index)
 </script>
 
 <style>
@@ -206,6 +224,7 @@ body {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s, box-shadow 0.2s;
   cursor: pointer;
+  position: relative;
 }
 
 .game-card:hover {
@@ -261,5 +280,25 @@ body {
 .game-settings-icon:hover {
   transform: scale(1.5);
 }
+
+.launching-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+}
+.spinner {
+  width: 18px; height: 18px;
+  border: 3px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+.launching-text { color: #fff; font-size: 0.95rem; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 </style>

@@ -51,9 +51,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openConfigure: (steamID: number): Promise<void> => 
     ipcRenderer.invoke('open-configure', steamID),
   
-  // Save game configuration
-  saveGameConfig: (index: number, user: string, password: string): Promise<void> => 
-    ipcRenderer.invoke('save-game-config', index, user, password),
+  // Save game configuration (optionally include processName)
+  saveGameConfig: (index: number, user: string, password: string, processName?: string): Promise<void> => 
+    ipcRenderer.invoke('save-game-config', index, user, password, processName),
 
   // Securely fetch stored password for a game/user (on demand)
   getStoredPassword: (steamID: number, user: string): Promise<{ success: boolean; password?: string; error?: string }> =>
@@ -73,6 +73,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('config-updated', () => callback())
   },
 
+  // Launching status events (per-game index)
+  onLaunchingStarted: (callback: (index: number) => void): void => {
+    ipcRenderer.on('launching-started', (_e, index: number) => callback(index))
+  },
+  onLaunchingStopped: (callback: (index: number) => void): void => {
+    ipcRenderer.on('launching-stopped', (_e, index: number) => callback(index))
+  },
+
   // Listen for configure game event
   onConfigureGame: (callback: (game: Game, index: number) => void): void => {
     ipcRenderer.on('configure-game', (event, game: Game, index: number) => callback(game, index))
@@ -90,11 +98,13 @@ declare global {
       startSteamOnly: (index: number) => Promise<ExecutionResult>
       onGamesLoaded: (callback: (games: Game[]) => void) => void
       openConfigure: (steamID: number) => Promise<void>
-      saveGameConfig: (index: number, user: string, password: string) => Promise<void>
+      saveGameConfig: (index: number, user: string, password: string, processName?: string) => Promise<void>
       getStoredPassword: (steamID: number, user: string) => Promise<{ success: boolean; password?: string; error?: string }>
       toggleHidden: (steamID: number) => Promise<void>
       getAllGames: () => Promise<Game[]>
       onConfigUpdated: (callback: () => void) => void
+      onLaunchingStarted: (callback: (index: number) => void) => void
+      onLaunchingStopped: (callback: (index: number) => void) => void
       onConfigureGame: (callback: (game: Game, index: number) => void) => void
     }
   }

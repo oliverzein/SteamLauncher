@@ -18,6 +18,12 @@
       <p v-if="passwordError" class="error">{{ passwordError }}</p>
     </div>
 
+    <div class="row">
+      <label>Process name (optional)</label>
+      <input v-model="processName" placeholder="e.g., Palworld-Win64-Shipping" />
+      <p class="hint">Used for the busy indicator. We stop showing "Launching…" once this process appears.</p>
+    </div>
+
     <div class="actions">
       <button @click="save">Save</button>
       <button @click="closeWin">Close</button>
@@ -35,12 +41,14 @@ const password = ref('')
 const showPassword = ref(false)
 const usernameError = ref('')
 const passwordError = ref('')
+const processName = ref('')
 
-const onConfigureGame = (game: { user: string; name: string; steamID: number }, i: number) => {
+const onConfigureGame = (game: { user: string; name: string; steamID: number; processName?: string }, i: number) => {
   user.value = game.user
   password.value = ''
   index.value = i
   steamID.value = game.steamID
+  processName.value = game.processName || ''
   document.title = `${game.name} - Configure`
 }
 
@@ -70,7 +78,7 @@ const save = async () => {
     return
   }
   if (index.value >= 0) {
-    await window.electronAPI.saveGameConfig(index.value, user.value, password.value)
+    await window.electronAPI.saveGameConfig(index.value, user.value, password.value, processName.value)
     window.close()
   }
 }
@@ -101,6 +109,7 @@ input {
 .toggle { padding: 6px 10px; }
 .error { color: #ffb3b3; margin: 4px 0 0; font-size: 0.9em; }
 .invalid { border-color: #cc6666; }
+.hint { color: #bbb; margin: 4px 0 0; font-size: 0.85em; }
 .actions { display: flex; gap: 8px; }
 button { padding: 6px 10px; }
 </style>

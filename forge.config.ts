@@ -14,9 +14,12 @@ const config: ForgeConfig = {
     asar: {
       unpackDir: '**/node_modules/keytar/**'
     },
+    icon: 'assets/app-icon.png',
     extraResource: [
       // Ship keytar module alongside resources for reliable runtime resolution
       'node_modules/keytar',
+      // Bundle static assets (e.g., app-icon.svg, Steam_icon_logo.svg)
+      'assets',
     ],
   },
   rebuildConfig: {},
