@@ -8,7 +8,8 @@ declare const SETTINGS_WINDOW_VITE_NAME: string
 declare const CONFIGURE_WINDOW_VITE_DEV_SERVER_URL: string | undefined
 // @ts-ignore
 declare const CONFIGURE_WINDOW_VITE_NAME: string
-import { app, BrowserWindow, ipcMain, Menu, globalShortcut } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, globalShortcut, Tray, nativeImage } from 'electron';
+import type { Event as ElectronEvent } from 'electron'
 import { exec } from 'child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -23,6 +24,33 @@ let steamStarters: SteamStarter[] = []
 let config: Config = {
   compatdataPaths: ['~/.local/share/Steam/steamapps/compatdata/'],
   steamApps: []
+}
+let tray: Tray | null = null
+let isQuitting = false
+
+// Run a shell command and resolve when done
+function run(cmd: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    exec(cmd, (error, stdout, stderr) => {
+      resolve({ code: error ? (error as any).code ?? 1 : 0, stdout: stdout ?? '', stderr: stderr ?? '' })
+    })
+  })
+}
+
+// If the game has a resolution configured, apply it using kscreen-doctor
+async function applyResolutionIfConfigured(index: number): Promise<void> {
+  try {
+    const game = config.steamApps[index]
+    const res = game?.resolution?.trim()
+    if (!res) return
+    console.log(`[resolution] Applying: kscreen-doctor ${res}`)
+    const { code, stderr } = await run(`kscreen-doctor ${res}`)
+    if (code !== 0) {
+      console.warn('[resolution] kscreen-doctor returned non-zero exit code:', code, stderr)
+    }
+  } catch (e) {
+    console.warn('[resolution] Failed to apply resolution', e)
+  }
 }
 
 // Load config from file
@@ -57,6 +85,7 @@ function saveConfig(): void {
         steamID: g.steamID,
         hidden: g.hidden ?? false,
         processName: g.processName,
+        resolution: g.resolution,
       })),
     }
     fs.writeFileSync(configPath, JSON.stringify(sanitized, null, 2))
@@ -176,7 +205,7 @@ const createSettingsWindow = () => {
 const createConfigureWindow = (index: number) => {
   const configureWin = new BrowserWindow({
     width: 600,
-    height: 300,
+    height: 600,
     icon: getAppIconPath(),
     autoHideMenuBar: true,
     webPreferences: {
@@ -223,7 +252,7 @@ function getAppIconPath(): string | undefined {
 const createWindow = () => {
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 1416,
+    width: 1600,
     height: 600,
     icon: getAppIconPath(),
     autoHideMenuBar: true,
@@ -234,6 +263,28 @@ const createWindow = () => {
       nodeIntegration: false,
     },
   });
+
+  // Intercept close to minimize to tray instead of quitting
+  mainWindow.on('close', (e: ElectronEvent) => {
+    if (!isQuitting) {
+      e.preventDefault()
+      mainWindow?.hide()
+      mainWindow?.setSkipTaskbar(true)
+    }
+  })
+
+  // Intercept minimize to hide to tray
+  mainWindow.on('minimize', () => {
+    if (!isQuitting) {
+      mainWindow?.hide()
+      mainWindow?.setSkipTaskbar(true)
+    }
+  })
+
+  // Ensure it reappears in taskbar when shown
+  mainWindow.on('show', () => {
+    mainWindow?.setSkipTaskbar(false)
+  })
 
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -269,6 +320,47 @@ app.whenReady().then(async () => {
     globalShortcut.register('F12', toggleFocusedDevTools)
   }
   registerDevtoolsShortcuts()
+
+  // Create system tray
+  const iconPath = getAppIconPath()
+  if (iconPath) {
+    const trayImage = nativeImage.createFromPath(iconPath)
+    tray = new Tray(trayImage)
+    tray.setToolTip('Steam Game Launcher')
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Show',
+        click: () => {
+          if (!mainWindow || mainWindow.isDestroyed()) {
+            createWindow()
+          }
+          mainWindow?.show()
+          mainWindow?.setSkipTaskbar(false)
+          mainWindow?.focus()
+        },
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit',
+        click: () => {
+          isQuitting = true
+          app.quit()
+        },
+      },
+    ])
+    tray.setContextMenu(contextMenu)
+    tray.on('click', () => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        createWindow()
+      }
+      if (mainWindow?.isVisible()) {
+        mainWindow.focus()
+      } else {
+        mainWindow?.show()
+        mainWindow?.setSkipTaskbar(false)
+      }
+    })
+  }
   loadConfig()
   const games = await fetchGames()
   steamStarters = games.map(game => new SteamStarter(game.user, game.steamID, 'steam'))
@@ -295,6 +387,8 @@ ipcMain.handle('start-game', async (event, index: number) => {
     if (!starter) {
       return { success: false, error: 'Game starter not available' }
     }
+    // Apply optional screen resolution before launching
+    await applyResolutionIfConfigured(index)
     // Notify renderer: launching started
     BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-started', index))
     const result = await starter.execute()
@@ -366,7 +460,7 @@ ipcMain.handle('open-configure', async (event, steamID: number) => {
   return { success: true }
 })
 
-ipcMain.handle('save-game-config', async (event, index: number, user: string, password: string, processName?: string) => {
+ipcMain.handle('save-game-config', async (event, index: number, user: string, password: string, processName?: string, resolution?: string) => {
   if (typeof index !== 'number' || !Number.isInteger(index)) {
     return { success: false, error: 'Invalid index type' }
   }
@@ -383,6 +477,11 @@ ipcMain.handle('save-game-config', async (event, index: number, user: string, pa
   if (typeof processName === 'string') {
     const pn = processName.trim()
     config.steamApps[index].processName = pn.length ? pn : undefined
+  }
+  // Update desired resolution string (allow empty -> undefined)
+  if (typeof resolution === 'string') {
+    const rs = resolution.trim()
+    config.steamApps[index].resolution = rs.length ? rs : undefined
   }
   // If a non-empty password is provided, store it securely in keytar
   if (password && password.length > 0) {
@@ -499,6 +598,8 @@ ipcMain.handle('start-steam-only', async (_event, index: number) => {
     }
     // Notify renderer: launching started
     BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-started', index))
+    // Apply optional screen resolution as well for Steam-only (if set)
+    await applyResolutionIfConfigured(index)
     const result = await starter.executeSteamOnly()
     // For Steam-only launch, watch the Steam client process rather than the game
     const procName = process.platform === 'win32' ? 'steam.exe' : 'steam'
@@ -533,7 +634,9 @@ ipcMain.handle('start-steam-only', async (_event, index: number) => {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    app.quit();
+    if (!tray) {
+      app.quit();
+    }
   }
 });
 
@@ -548,6 +651,10 @@ app.on('activate', () => {
 // Unregister all shortcuts on quit
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
+})
+
+app.on('before-quit', () => {
+  isQuitting = true
 })
 
 // In this file you can include the rest of your app's specific main process

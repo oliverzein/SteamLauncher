@@ -23,6 +23,12 @@
       <p class="hint">Used for the busy indicator. We stop showing "Launching…" once this process appears.</p>
     </div>
 
+    <div class="row">
+      <label>Screen resolution (optional)</label>
+      <input v-model="resolution" placeholder="e.g., output.HDMI-A-1.mode.3840x2160@60" />
+      <p class="hint">If set, we run <code>kscreen-doctor</code> with this string before launch.</p>
+    </div>
+
     <div class="actions">
       <button @click="save">Save</button>
       <button @click="closeWin">Close</button>
@@ -41,13 +47,15 @@ const showPassword = ref(false)
 const usernameError = ref('')
 const passwordError = ref('')
 const processName = ref('')
+const resolution = ref('')
 
-const onConfigureGame = (game: { user: string; name: string; steamID: number; processName?: string }, i: number) => {
+const onConfigureGame = (game: { user: string; name: string; steamID: number; processName?: string; resolution?: string }, i: number) => {
   user.value = game.user
   password.value = ''
   index.value = i
   steamID.value = game.steamID
   processName.value = game.processName || ''
+  resolution.value = game.resolution || ''
   document.title = `${game.name} - Configure`
 }
 
@@ -77,7 +85,7 @@ const save = async () => {
     return
   }
   if (index.value >= 0) {
-    await window.electronAPI.saveGameConfig(index.value, user.value, password.value, processName.value)
+    await window.electronAPI.saveGameConfig(index.value, user.value, password.value, processName.value, resolution.value)
     window.close()
   }
 }

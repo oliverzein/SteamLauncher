@@ -12,6 +12,8 @@ interface Game {
   user: string
   steamID: number
   hidden?: boolean
+  processName?: string
+  resolution?: string
 }
 
 interface Config {
@@ -51,9 +53,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openConfigure: (steamID: number): Promise<void> => 
     ipcRenderer.invoke('open-configure', steamID),
   
-  // Save game configuration (optionally include processName)
-  saveGameConfig: (index: number, user: string, password: string, processName?: string): Promise<void> => 
-    ipcRenderer.invoke('save-game-config', index, user, password, processName),
+  // Save game configuration (optionally include processName and resolution)
+  saveGameConfig: (index: number, user: string, password: string, processName?: string, resolution?: string): Promise<void> => 
+    ipcRenderer.invoke('save-game-config', index, user, password, processName, resolution),
 
   // Securely fetch stored password for a game/user (on demand)
   getStoredPassword: (steamID: number, user: string): Promise<{ success: boolean; password?: string; error?: string }> =>
@@ -98,7 +100,7 @@ declare global {
       startSteamOnly: (index: number) => Promise<ExecutionResult>
       onGamesLoaded: (callback: (games: Game[]) => void) => void
       openConfigure: (steamID: number) => Promise<void>
-      saveGameConfig: (index: number, user: string, password: string, processName?: string) => Promise<void>
+      saveGameConfig: (index: number, user: string, password: string, processName?: string, resolution?: string) => Promise<void>
       getStoredPassword: (steamID: number, user: string) => Promise<{ success: boolean; password?: string; error?: string }>
       toggleHidden: (steamID: number) => Promise<void>
       getAllGames: () => Promise<Game[]>

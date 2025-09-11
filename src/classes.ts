@@ -148,6 +148,7 @@ interface Game {
   steamID: number
   hidden?: boolean
   processName?: string
+  resolution?: string
 }
 
 interface Config {
