@@ -20,6 +20,7 @@ interface Config {
   // Unified to array to support multiple Proton compatdata directories
   compatdataPaths: string[]
   steamApps: Game[]
+  startMinimized?: boolean
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -69,6 +70,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Get all games including hidden ones
   getAllGames: (): Promise<Game[]> => 
     ipcRenderer.invoke('get-all-games'),
+  // Refresh games from disk
+  refreshGames: (): Promise<{ success: boolean; count: number }> =>
+    ipcRenderer.invoke('refresh-games'),
   
   // Listen for config updated event
   onConfigUpdated: (callback: () => void): void => {
@@ -104,6 +108,7 @@ declare global {
       getStoredPassword: (steamID: number, user: string) => Promise<{ success: boolean; password?: string; error?: string }>
       toggleHidden: (steamID: number) => Promise<void>
       getAllGames: () => Promise<Game[]>
+      refreshGames: () => Promise<{ success: boolean; count: number }>
       onConfigUpdated: (callback: () => void) => void
       onLaunchingStarted: (callback: (index: number) => void) => void
       onLaunchingStopped: (callback: (index: number) => void) => void

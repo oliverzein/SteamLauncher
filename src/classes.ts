@@ -30,9 +30,8 @@ class AppStarter {
     return new Promise((resolve, reject) => {
       try {
         const child: ChildProcess = spawn(this.executablePath, this.executableArgs, {
-          stdio: 'inherit'
+          stdio: 'ignore'
         })
-        console.log(`Started executable: ${this.executablePath} with args: ${this.executableArgs.join(' ')}`)
         resolve({ success: true, pid: child.pid })
       } catch (error) {
         console.error('Failed to start executable:', error)
@@ -83,10 +82,7 @@ class SteamStarter extends AppStarter {
         return { success: false, error: 'No password stored for this game/user. Please configure credentials.' }
       }
       this.executableArgs = ['-login', this.user, password, '-applaunch', this.steamID.toString()]
-      const child: ChildProcess = spawn(this.executablePath, this.executableArgs, { stdio: 'inherit' })
-      // Mask password in logs
-      const maskedArgs = ['-login', this.user, '********', '-applaunch', this.steamID.toString()]
-      console.log(`Started executable: ${this.executablePath} with args: ${maskedArgs.join(' ')}`)
+      const child: ChildProcess = spawn(this.executablePath, this.executableArgs, { stdio: 'ignore' })
       return { success: true, pid: child.pid }
     } catch (error) {
       console.error('Failed to start executable:', error)
@@ -125,10 +121,7 @@ class SteamStarter extends AppStarter {
         return { success: false, error: 'No password stored for this game/user. Please configure credentials.' }
       }
       this.executableArgs = ['-login', this.user, password]
-      const child: ChildProcess = spawn(this.executablePath, this.executableArgs, { stdio: 'inherit' })
-      // Mask password in logs
-      const maskedArgs = ['-login', this.user, '********']
-      console.log(`Started executable (Steam only): ${this.executablePath} with args: ${maskedArgs.join(' ')}`)
+      const child: ChildProcess = spawn(this.executablePath, this.executableArgs, { stdio: 'ignore' })
       return { success: true, pid: child.pid }
     } catch (error) {
       console.error('Failed to start Steam only:', error)
@@ -154,6 +147,7 @@ interface Game {
 interface Config {
   compatdataPaths: string[]
   steamApps: Game[]
+  startMinimized?: boolean
 }
 
 // ##############

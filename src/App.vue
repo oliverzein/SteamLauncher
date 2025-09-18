@@ -3,6 +3,7 @@
     <header class="header">
       <h1>Steam Game Launcher</h1>
       <div class="header-actions">
+        <button @click="refresh" class="app-refresh-btn" title="Refresh library">⟳</button>
         <button @click="openSettings" class="app-settings-btn" title="Settings">⚙️</button>
       </div>
     </header>
@@ -125,6 +126,16 @@ const startSteamOnly = async (index: number) => {
 }
 
 const isLaunching = (index: number) => launching.value.has(index)
+
+const refresh = async () => {
+  loading.value = true
+  try {
+    await window.electronAPI.refreshGames()
+    // games-loaded event will update list and stop loading
+  } catch (e) {
+    loading.value = false
+  }
+}
 </script>
 
 <style>
@@ -161,11 +172,12 @@ const isLaunching = (index: number) => launching.value.has(index)
 }
 
 .header-actions { display: flex; gap: 0.5rem; align-items: center; }
+.app-refresh-btn,
 .app-settings-btn {
   background: none;
   border: none;
   color: var(--text-color);
-  font-size: 1rem;
+  font-size: 2rem;
   cursor: pointer;
   padding: 0.5rem;
   border-radius: 4px;
@@ -173,6 +185,7 @@ const isLaunching = (index: number) => launching.value.has(index)
   display: block;
 }
 
+.app-refresh-btn:hover,
 .app-settings-btn:hover {
   background-color: var(--accent-weak);
 }
@@ -181,7 +194,7 @@ const isLaunching = (index: number) => launching.value.has(index)
 .loading, .no-games {
   text-align: center;
   padding: 3rem;
-  font-size: 1.2rem;
+  font-size: 1.5rem;
 }
 
 .game-grid {

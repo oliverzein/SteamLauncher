@@ -19,14 +19,24 @@ import * as os from 'os';
 import started from 'electron-squirrel-startup';
 import { AppStarter, SteamStarter, Game, Config } from './classes'
 
+// Reduce Chromium/Electron log verbosity (set before 'ready')
+// log-level 3 = warnings and above; v=0 disables extra verbose logs
+app.commandLine.appendSwitch('log-level', '3')
+app.commandLine.appendSwitch('v', '0')
+
 let mainWindow: BrowserWindow | null = null
 let steamStarters: SteamStarter[] = []
 let config: Config = {
   compatdataPaths: ['~/.local/share/Steam/steamapps/compatdata/'],
-  steamApps: []
+  steamApps: [],
+  startMinimized: false,
 }
 let tray: Tray | null = null
 let isQuitting = false
+
+// Verbose logging toggle (set SL_VERBOSE=1 to enable)
+const VERBOSE = !!process.env.SL_VERBOSE
+const vlog = (...args: any[]) => { if (VERBOSE) console.log('[verbose]', ...args) }
 
 // Run a shell command and resolve when done
 function run(cmd: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
@@ -37,19 +47,89 @@ function run(cmd: string): Promise<{ code: number | null; stdout: string; stderr
   })
 }
 
+// Build a robust pgrep command that searches the full command line (works with Wine/Proton)
+function buildPgrepCmd(raw: string): string {
+  const name = path.basename(raw)
+  const escaped = name.replace(/'/g, "'\\''")
+  // -f: search full cmdline, -i: case-insensitive (handles wine path case)
+  return `pgrep -fi '${escaped}'`
+}
+
+// Map the renderer-visible index (filtered list) to the true config entry using steamID
+function getGameForVisibleIndex(index: number): Game | undefined {
+  const starter = steamStarters[index]
+  if (!starter) return undefined
+  return config.steamApps.find(g => g.steamID === starter.steamID)
+}
+
+// Try to read the running Steam login from the steam process command line
+async function getRunningSteamLogin(): Promise<string | null> {
+  return new Promise((resolve) => {
+    // -x exact name, -a print command line
+    exec("pgrep -x -a steam", (err, stdout) => {
+      if (err || !stdout) return resolve(null)
+      const lines = stdout.split('\n').filter(Boolean)
+      for (const line of lines) {
+        // Example: "4170 /path/to/steam -srt-logger-opened -login user pass"
+        const after = line.split(' -login ')[1]
+        if (after) {
+          const parts = after.trim().split(/\s+/)
+          if (parts.length > 0) {
+            return resolve(parts[0])
+          }
+        }
+      }
+      resolve(null)
+    })
+  })
+}
+
+// If Steam is running with a different login than desired, request shutdown and wait for exit
+async function ensureSteamUserOrShutdown(desiredUser: string): Promise<void> {
+  try {
+    const runningUser = await getRunningSteamLogin()
+    if (!runningUser) return // no steam or cannot detect; proceed
+    if (runningUser === desiredUser) return // already correct account
+    // Different account: request shutdown and wait until gone
+    exec('steam -shutdown', () => { /* noop */ })
+    const start = Date.now()
+    const timeoutMs = 30000
+    const waitTick = () => {
+      exec("pgrep -x steam", (err, stdout) => {
+        const stillRunning = !err && !!(stdout && stdout.trim().length > 0)
+        if (!stillRunning) return
+        if (Date.now() - start > timeoutMs) return
+        setTimeout(waitTick, 500)
+      })
+    }
+    await new Promise<void>((resolve) => {
+      const loop = () => {
+        exec("pgrep -x steam", (err, stdout) => {
+          const stillRunning = !err && !!(stdout && stdout.trim().length > 0)
+          if (!stillRunning) return resolve()
+          if (Date.now() - start > timeoutMs) return resolve()
+          setTimeout(loop, 500)
+        })
+      }
+      loop()
+    })
+  } catch {
+    // Ignore failures; proceed to launch
+  }
+}
+
 // If the game has a resolution configured, apply it using kscreen-doctor
 async function applyResolutionIfConfigured(index: number): Promise<void> {
   try {
-    const game = config.steamApps[index]
+    const game = getGameForVisibleIndex(index)
     const res = game?.resolution?.trim()
     if (!res) return
-    console.log(`[resolution] Applying: kscreen-doctor ${res}`)
     const { code, stderr } = await run(`kscreen-doctor ${res}`)
     if (code !== 0) {
-      console.warn('[resolution] kscreen-doctor returned non-zero exit code:', code, stderr)
+      // silently ignore non-zero exit
     }
   } catch (e) {
-    console.warn('[resolution] Failed to apply resolution', e)
+    // silently ignore resolution errors
   }
 }
 
@@ -90,7 +170,7 @@ function saveConfig(): void {
     }
     fs.writeFileSync(configPath, JSON.stringify(sanitized, null, 2))
   } catch (error) {
-    console.error('Failed to save config:', error)
+    if (VERBOSE) console.error('Failed to save config:', error)
   }
 }
 
@@ -112,10 +192,12 @@ async function fetchAppDetails(steamID: number): Promise<{ name: string; icon?: 
             resolve({ name: `Game ${steamID}` })
           }
         } catch (e) {
+          if (VERBOSE) console.error(`Failed API for steamID ${steamID}:`, e)
           resolve({ name: `Game ${steamID}` })
         }
       })
     }).on('error', (err) => {
+      if (VERBOSE) console.error(`Failed API for steamID ${steamID}:`, err)
       resolve({ name: `Game ${steamID}` })
     })
   })
@@ -129,12 +211,12 @@ async function fetchGames(): Promise<Game[]> {
   for (const path of config.compatdataPaths) {
     try {
       const fullPath = path.replace('~', os.homedir())
-      console.log(`Using compatdata path: ${fullPath}`)
+      if (VERBOSE) vlog(`Using compatdata path: ${fullPath}`)
       const entries = fs.readdirSync(fullPath)
-      console.log(`Found ${entries.length} entries in compatdata`)
+      if (VERBOSE) vlog(`Found ${entries.length} entries in compatdata`)
 
       const filteredEntries = entries.filter(entry => /^\d+$/.test(entry))
-      console.log(`Filtered steamIDs: [ ${filteredEntries.join(', ')} ]`)
+      if (VERBOSE) vlog(`Filtered steamIDs: [ ${filteredEntries.join(', ')} ]`)
 
       for (const entry of filteredEntries) {
         const steamID = parseInt(entry)
@@ -165,7 +247,7 @@ async function fetchGames(): Promise<Game[]> {
         }
       }
     } catch (error) {
-      console.error(`Failed to read compatdata path ${path}:`, error)
+      if (VERBOSE) console.error(`Failed to read compatdata path ${path}:`, error)
     }
   }
 
@@ -368,6 +450,11 @@ app.whenReady().then(async () => {
   createWindow()
 
   if (mainWindow) {
+    // If user prefers start minimized, hide to tray immediately
+    if (config.startMinimized) {
+      mainWindow.hide()
+      mainWindow.setSkipTaskbar(true)
+    }
     mainWindow.webContents.once('did-finish-load', () => {
       mainWindow.webContents.send('games-loaded', games)
     })
@@ -387,34 +474,44 @@ ipcMain.handle('start-game', async (event, index: number) => {
     if (!starter) {
       return { success: false, error: 'Game starter not available' }
     }
+    // Ensure Steam account matches configured game user; shutdown if different
+    const gameForUser = getGameForVisibleIndex(index)
+    if (gameForUser?.user) {
+      await ensureSteamUserOrShutdown(gameForUser.user)
+    }
     // Apply optional screen resolution before launching
     await applyResolutionIfConfigured(index)
-    // Notify renderer: launching started
+    // Notify renderer after prep work has started
     BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-started', index))
     const result = await starter.execute()
     // Start process watcher; fall back to Steam client if no per-game processName configured
-    const game = config.steamApps[index]
+    const game = getGameForVisibleIndex(index)
     const configured = game?.processName?.trim()
-    const procName = configured && configured.length > 0
-      ? configured
-      : (process.platform === 'win32' ? 'steam.exe' : 'steam')
+    const fallback = (process.platform === 'win32' ? 'steam.exe' : 'steam')
+    const procName = configured && configured.length > 0 ? configured : fallback
     if (result.success) {
       const start = Date.now()
-      const timeoutMs = 60000 // 60s timeout
-      const interval = setInterval(() => {
+      const timeoutMs = 120000 // 120s timeout
+      const initialDelayMs = 4000
+      const cmd = buildPgrepCmd(procName)
+      let attempt = 0
+      const tick = () => {
+        attempt++
         if (Date.now() - start > timeoutMs) {
-          clearInterval(interval)
           BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
           return
         }
-        // Use pgrep -f to match full command line
-        exec(`pgrep -f ${JSON.stringify(procName)}`, (err, stdout) => {
-          if (!err && stdout && stdout.trim().length > 0) {
-            clearInterval(interval)
+        exec(cmd, (err, stdout, stderr) => {
+          const out = (stdout || '').trim()
+          if (out.length > 0) {
             BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+          } else {
+            setTimeout(tick, 1500)
           }
         })
-      }, 1500)
+      }
+      // Start after a short delay to give the process time to spawn
+      setTimeout(tick, initialDelayMs)
     } else {
       // Stop immediately if failed
       BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
@@ -437,6 +534,10 @@ ipcMain.handle('save-config', async (event, newConfig) => {
     if (!valid) {
       return { success: false, error: 'compatdataPaths must be a non-empty array of strings' }
     }
+  }
+  // Validate startMinimized if provided
+  if (newConfig && 'startMinimized' in newConfig && typeof newConfig.startMinimized !== 'boolean') {
+    return { success: false, error: 'startMinimized must be a boolean' }
   }
   config = { ...config, ...newConfig }
   saveConfig()
@@ -605,20 +706,26 @@ ipcMain.handle('start-steam-only', async (_event, index: number) => {
     const procName = process.platform === 'win32' ? 'steam.exe' : 'steam'
     if (result.success) {
       const start = Date.now()
-      const timeoutMs = 60000 // 60s timeout
-      const interval = setInterval(() => {
+      const timeoutMs = 120000 // 120s timeout
+      const initialDelayMs = 4000
+      const cmd = buildPgrepCmd(procName)
+      let attempt = 0
+      const tick = () => {
+        attempt++
         if (Date.now() - start > timeoutMs) {
-          clearInterval(interval)
           BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
           return
         }
-        exec(`pgrep -f ${JSON.stringify(procName)}`, (err, stdout) => {
-          if (!err && stdout && stdout.trim().length > 0) {
-            clearInterval(interval)
+        exec(cmd, (err, stdout, stderr) => {
+          const out = (stdout || '').trim()
+          if (out.length > 0) {
             BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+          } else {
+            setTimeout(tick, 1500)
           }
         })
-      }, 1500)
+      }
+      setTimeout(tick, initialDelayMs)
     } else {
       BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
     }
@@ -629,9 +736,14 @@ ipcMain.handle('start-steam-only', async (_event, index: number) => {
   }
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+// Manually refresh game library
+ipcMain.handle('refresh-games', async () => {
+  const games = await fetchGames()
+  steamStarters = games.map(game => new SteamStarter(game.user, game.steamID, 'steam'))
+  BrowserWindow.getAllWindows().forEach(win => win.webContents.send('games-loaded', games))
+  return { success: true, count: games.length }
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     if (!tray) {
@@ -641,8 +753,6 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
@@ -656,6 +766,3 @@ app.on('will-quit', () => {
 app.on('before-quit', () => {
   isQuitting = true
 })
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.

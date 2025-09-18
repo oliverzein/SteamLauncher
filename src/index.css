@@ -46,17 +46,24 @@ button:hover {
   background: var(--accent-weak);
 }
 
-input, select {
+input:not([type='checkbox']), select {
   background: var(--surface-2);
   border: 1px solid var(--border-color);
   color: var(--text-color);
   border-radius: 6px;
   padding: 6px 8px;
+  width: 100%;
 }
 
 input:focus, select:focus, button:focus {
   outline: 2px solid var(--accent-color);
   outline-offset: 1px;
+}
+
+/* Checkboxes should not stretch */
+input[type='checkbox'] {
+  width: auto;
+  height: 16px;
 }
 
 /* Utility */
