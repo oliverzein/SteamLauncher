@@ -1,3 +1,33 @@
+// In dev, wait for the Vite dev server to respond with a non-504 before loading the URL
+function waitForDevServer(urlStr: string, overallTimeoutMs = 10000, retryIntervalMs = 200): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const start = Date.now()
+    const attempt = () => {
+      try {
+        const u = new URL(urlStr)
+        const getter = u.protocol === 'https:' ? https.get : http.get
+        const req = getter(urlStr, (res) => {
+          // Accept any successful-ish code below 500; specifically avoid 5xx like 504
+          if (res.statusCode && res.statusCode < 500) {
+            res.resume() // drain
+            return resolve()
+          }
+          res.resume()
+          if (Date.now() - start > overallTimeoutMs) return reject(new Error(`Dev server not ready: ${res.statusCode}`))
+          setTimeout(attempt, retryIntervalMs)
+        })
+        req.on('error', () => {
+          if (Date.now() - start > overallTimeoutMs) return reject(new Error('Dev server not reachable'))
+          setTimeout(attempt, retryIntervalMs)
+        })
+      } catch {
+        if (Date.now() - start > overallTimeoutMs) return reject(new Error('Dev server URL invalid'))
+        setTimeout(attempt, retryIntervalMs)
+      }
+    }
+    attempt()
+  })
+}
 // Ambient declarations for Vite-injected globals (Forge Vite plugin)
 // These will be replaced at build time; in dev they are defined strings.
 // @ts-ignore
@@ -15,6 +45,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import * as fs from 'fs';
 import * as https from 'https';
+import * as http from 'http';
 import * as os from 'os';
 import started from 'electron-squirrel-startup';
 import { AppStarter, SteamStarter, Game, Config } from './classes'
@@ -166,6 +197,7 @@ function saveConfig(): void {
         hidden: g.hidden ?? false,
         processName: g.processName,
         resolution: g.resolution,
+        notes: g.notes,
       })),
     }
     fs.writeFileSync(configPath, JSON.stringify(sanitized, null, 2))
@@ -346,8 +378,12 @@ const createWindow = () => {
     },
   });
 
-  // Intercept close to minimize to tray instead of quitting
+  // Intercept close to minimize to tray instead of quitting (disabled in dev to avoid leftover instances)
   mainWindow.on('close', (e: ElectronEvent) => {
+    if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+      // In dev, let the window close normally so the app exits cleanly
+      return
+    }
     if (!isQuitting) {
       e.preventDefault()
       mainWindow?.hide()
@@ -355,8 +391,9 @@ const createWindow = () => {
     }
   })
 
-  // Intercept minimize to hide to tray
+  // Intercept minimize to hide to tray (disabled in dev)
   mainWindow.on('minimize', () => {
+    if (MAIN_WINDOW_VITE_DEV_SERVER_URL) return
     if (!isQuitting) {
       mainWindow?.hide()
       mainWindow?.setSkipTaskbar(true)
@@ -370,7 +407,66 @@ const createWindow = () => {
 
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    // Clear HTTP and storage caches to avoid stale optimized deps between restarts
+    try {
+      const ses = mainWindow.webContents.session
+      ses.clearCache()
+      ses.clearStorageData({
+        storages: ['appcache', 'serviceworkers', 'cachestorage']
+      })
+    } catch {}
+    // Add a cache-busting query parameter to avoid reusing stale bundles
+    const devUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL.includes('?')
+      ? `${MAIN_WINDOW_VITE_DEV_SERVER_URL}&t=${Date.now()}`
+      : `${MAIN_WINDOW_VITE_DEV_SERVER_URL}?t=${Date.now()}`
+    // Preflight: wait for dev server readiness to avoid intermittent 504
+    waitForDevServer(MAIN_WINDOW_VITE_DEV_SERVER_URL).then(() => {
+      if (!mainWindow.isDestroyed()) mainWindow.loadURL(devUrl)
+    }).catch(() => {
+      // Even if preflight fails, attempt to load; the other safeguards may recover
+      if (!mainWindow.isDestroyed()) mainWindow.loadURL(devUrl)
+    })
+    // Dev resilience: sometimes Vite serves 504 "Outdated Optimize Dep" which leaves the page blank.
+    // Listen for that console message and force a reload (throttled) to recover automatically.
+    let lastDevReload = 0
+    mainWindow.webContents.on('console-message', (_event, _level, message) => {
+      if (typeof message === 'string' && message.includes('Outdated Optimize Dep')) {
+        const now = Date.now()
+        if (now - lastDevReload > 2000) {
+          lastDevReload = now
+          mainWindow.webContents.reloadIgnoringCache()
+        }
+      }
+    })
+    // Additionally, if the top-level load fails, retry once shortly after.
+    let retriedFailLoad = false
+    mainWindow.webContents.on('did-fail-load', () => {
+      if (!retriedFailLoad) {
+        retriedFailLoad = true
+        setTimeout(() => {
+          if (!mainWindow.isDestroyed()) {
+            mainWindow.webContents.reloadIgnoringCache()
+          }
+        }, 500)
+      }
+    })
+    // Dev watchdog: if the page remains effectively blank shortly after load, reload once.
+    let watchdogTriggered = false
+    mainWindow.webContents.on('did-finish-load', () => {
+      setTimeout(async () => {
+        if (watchdogTriggered || mainWindow.isDestroyed()) return
+        try {
+          const contentLen: number = await mainWindow!.webContents.executeJavaScript(
+            'document.body && document.body.innerText ? document.body.innerText.trim().length : 0',
+            true
+          )
+          if (contentLen < 5) {
+            watchdogTriggered = true
+            mainWindow!.webContents.reloadIgnoringCache()
+          }
+        } catch { /* ignore */ }
+      }, 1200)
+    })
   } else {
     // Use the renderer output folder provided by Forge Vite plugin
     // MAIN_WINDOW_VITE_NAME is injected at build time
@@ -561,7 +657,7 @@ ipcMain.handle('open-configure', async (event, steamID: number) => {
   return { success: true }
 })
 
-ipcMain.handle('save-game-config', async (event, index: number, user: string, password: string, processName?: string, resolution?: string) => {
+ipcMain.handle('save-game-config', async (event, index: number, user: string, password: string, processName?: string, resolution?: string, notes?: string) => {
   if (typeof index !== 'number' || !Number.isInteger(index)) {
     return { success: false, error: 'Invalid index type' }
   }
@@ -583,6 +679,11 @@ ipcMain.handle('save-game-config', async (event, index: number, user: string, pa
   if (typeof resolution === 'string') {
     const rs = resolution.trim()
     config.steamApps[index].resolution = rs.length ? rs : undefined
+  }
+  // Update notes (allow empty -> undefined)
+  if (typeof notes === 'string') {
+    const ns = notes.trim()
+    config.steamApps[index].notes = ns.length ? ns : undefined
   }
   // If a non-empty password is provided, store it securely in keytar
   if (password && password.length > 0) {

@@ -142,6 +142,7 @@ interface Game {
   hidden?: boolean
   processName?: string
   resolution?: string
+  notes?: string
 }
 
 interface Config {

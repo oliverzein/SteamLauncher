@@ -47,17 +47,31 @@
         </div>
       </div>
     </main>
+
+    <div v-if="showNotesModal" class="modal-backdrop">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 class="modal-title">Notes for {{ modalGameName }}</h3>
+          <button class="modal-close" @click="cancelLaunch" aria-label="Close">✕</button>
+        </div>
+        <div class="notes-content">{{ notesText }}</div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Game } from './classes'
+import type { Game } from './classes'
 import steamIcon from '../assets/Steam_icon_logo.svg'
 
 const games = ref<Game[]>([])
 const loading = ref(true)
 const launching = ref<Set<number>>(new Set())
+const showNotesModal = ref(false)
+const notesText = ref('')
+const pendingLaunchIndex = ref<number | null>(null)
+const modalGameName = ref('')
 
 onMounted(() => {
   // Listen for games loaded from main process
@@ -79,6 +93,21 @@ onMounted(() => {
 })
 
 const launchGame = async (index: number) => {
+  const g = games.value[index]
+  const notes = (g.notes || '').trim()
+  if (notes.length > 0) {
+    pendingLaunchIndex.value = index
+    notesText.value = notes
+    modalGameName.value = g.name
+    showNotesModal.value = true
+    // Start immediately in parallel; do not wait for user confirmation
+    void doStart(index)
+    return
+  }
+  await doStart(index)
+}
+
+const doStart = async (index: number) => {
   try {
     const result = await window.electronAPI.startGame(index)
     if (result.success) {
@@ -91,6 +120,12 @@ const launchGame = async (index: number) => {
     console.error('Launch error:', error)
     alert('Error launching game')
   }
+}
+
+const cancelLaunch = () => {
+  // Launch already started; just close the notes modal
+  showNotesModal.value = false
+  pendingLaunchIndex.value = null
 }
 
 const openSettings = async () => {
@@ -289,5 +324,40 @@ const refresh = async () => {
 }
 .launching-text { color: #fff; font-size: 0.95rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal {
+  background: var(--surface-1);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  width: min(720px, 90vw);
+  max-height: 80vh;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modal-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.modal-title { font-size: 1.1rem; font-weight: 600; }
+.modal-close { background: none; border: none; color: var(--text-color); font-size: 1.2rem; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 4px; }
+.modal-close:hover { background: var(--accent-weak); }
+.notes-content {
+  white-space: pre-wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 10px;
+  overflow: auto;
+  max-height: 50vh;
+}
 
 </style>

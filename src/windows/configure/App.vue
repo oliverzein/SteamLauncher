@@ -29,6 +29,12 @@
       <p class="hint">If set, we run <code>kscreen-doctor</code> with this string before launch.</p>
     </div>
 
+    <div class="row">
+      <label>Notes</label>
+      <textarea v-model="notes" rows="8" placeholder="Write notes for this game..."></textarea>
+      <p class="hint">Notes are stored locally in the app config.</p>
+    </div>
+
     <div class="actions">
       <button @click="save">Save</button>
       <button @click="closeWin">Close</button>
@@ -48,14 +54,16 @@ const usernameError = ref('')
 const passwordError = ref('')
 const processName = ref('')
 const resolution = ref('')
+const notes = ref('')
 
-const onConfigureGame = (game: { user: string; name: string; steamID: number; processName?: string; resolution?: string }, i: number) => {
+const onConfigureGame = (game: { user: string; name: string; steamID: number; processName?: string; resolution?: string; notes?: string }, i: number) => {
   user.value = game.user
   password.value = ''
   index.value = i
   steamID.value = game.steamID
   processName.value = game.processName || ''
   resolution.value = game.resolution || ''
+  notes.value = game.notes || ''
   document.title = `${game.name} - Configure`
 }
 
@@ -85,7 +93,7 @@ const save = async () => {
     return
   }
   if (index.value >= 0) {
-    await window.electronAPI.saveGameConfig(index.value, user.value, password.value, processName.value, resolution.value)
+    await window.electronAPI.saveGameConfig(index.value, user.value, password.value, processName.value, resolution.value, notes.value)
     window.close()
   }
 }
@@ -109,6 +117,15 @@ input {
   border: 1px solid var(--border-color);
   background: var(--surface-2);
   color: var(--text-color);
+}
+textarea {
+  width: 100%;
+  padding: 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: var(--surface-2);
+  color: var(--text-color);
+  resize: vertical;
 }
 .password-row { display: flex; gap: 8px; }
 .password-row input { flex: 1; }
