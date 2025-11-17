@@ -1,7 +1,6 @@
 <template>
   <div id="app" class="app">
     <header class="header">
-      <h1>Steam Game Launcher</h1>
       <div class="header-actions">
         <button @click="refresh" class="app-refresh-btn" title="Refresh library">⟳</button>
         <button @click="openSettings" class="app-settings-btn" title="Settings">⚙️</button>
@@ -17,17 +16,24 @@
         <p>No Steam games found. Check your Steam compatdata path in settings.</p>
       </div>
       
-      <div v-else class="game-grid">
+      <div v-else class="game-grid" @dragover.prevent="onGridDragOver" @drop="onGridDrop">
         <div 
           v-for="(game, index) in games" 
           :key="game.steamID"
-          class="game-card"
+          :class="gameCardClasses(index)"
+          draggable="true"
+          @dragstart="onCardDragStart(index, $event)"
+          @dragover="onCardDragOver(index, $event)"
+          @dragleave="onCardDragLeave(index)"
+          @drop="onCardDrop(index, $event)"
+          @dragend="onCardDragEnd"
         >
           <img 
             v-if="game.icon" 
             :src="game.icon" 
             :alt="game.name" 
             class="game-icon"
+            draggable="false"
             @click="launchGame(index)"
           />
           <div class="game-info">
@@ -67,30 +73,104 @@ import steamIcon from '../assets/Steam_icon_logo.svg'
 
 const games = ref<Game[]>([])
 const loading = ref(true)
-const launching = ref<Set<number>>(new Set())
+const launchingSteamIDs = ref<Set<number>>(new Set())
 const showNotesModal = ref(false)
 const notesText = ref('')
 const pendingLaunchIndex = ref<number | null>(null)
 const modalGameName = ref('')
+const draggingSteamID = ref<number | null>(null)
+const dragOverSteamID = ref<number | null>(null)
 
 onMounted(() => {
   // Listen for games loaded from main process
   window.electronAPI.onGamesLoaded((loadedGames: Game[]) => {
     games.value = loadedGames
     loading.value = false
+    const validIds = new Set(loadedGames.map(g => g.steamID))
+    const filtered = new Set<number>()
+    launchingSteamIDs.value.forEach(id => {
+      if (validIds.has(id)) {
+        filtered.add(id)
+      }
+    })
+    launchingSteamIDs.value = filtered
   })
   // Launching state events
-  window.electronAPI.onLaunchingStarted((i: number) => {
-    const next = new Set(launching.value)
-    next.add(i)
-    launching.value = next
+  window.electronAPI.onLaunchingStarted(payload => {
+    const steamID = resolveSteamID(payload)
+    if (typeof steamID === 'number') {
+      const next = new Set(launchingSteamIDs.value)
+      next.add(steamID)
+      launchingSteamIDs.value = next
+    }
   })
-  window.electronAPI.onLaunchingStopped((i: number) => {
-    const next = new Set(launching.value)
-    next.delete(i)
-    launching.value = next
+  window.electronAPI.onLaunchingStopped(payload => {
+    const steamID = resolveSteamID(payload)
+    if (typeof steamID === 'number') {
+      const next = new Set(launchingSteamIDs.value)
+      next.delete(steamID)
+      launchingSteamIDs.value = next
+    }
   })
 })
+
+const resolveSteamID = (payload: unknown): number | undefined => {
+  if (payload && typeof payload === 'object' && 'steamID' in payload) {
+    const steamID = (payload as { steamID?: unknown }).steamID
+    return typeof steamID === 'number' ? steamID : undefined
+  }
+  if (typeof payload === 'number') {
+    return games.value[payload]?.steamID
+  }
+  return undefined
+}
+
+const persistOrder = async (orderedGames: Game[]) => {
+  try {
+    await window.electronAPI.saveGameOrder(orderedGames.map(g => g.steamID))
+  } catch (error) {
+    console.error('Failed to save game order:', error)
+  }
+}
+
+const resetDragState = () => {
+  draggingSteamID.value = null
+  dragOverSteamID.value = null
+}
+
+const reorderGames = (beforeSteamID?: number) => {
+  const sourceSteamID = draggingSteamID.value
+  if (sourceSteamID === null) return
+  const updated = [...games.value]
+  const sourceIndex = updated.findIndex(g => g.steamID === sourceSteamID)
+  if (sourceIndex === -1) {
+    resetDragState()
+    return
+  }
+  const [moved] = updated.splice(sourceIndex, 1)
+  if (typeof beforeSteamID === 'number') {
+    let targetIndex = updated.findIndex(g => g.steamID === beforeSteamID)
+    if (targetIndex === -1) {
+      updated.push(moved)
+    } else {
+      updated.splice(targetIndex, 0, moved)
+    }
+  } else {
+    updated.push(moved)
+  }
+  games.value = updated
+  persistOrder(updated)
+  resetDragState()
+}
+
+const gameCardClasses = (index: number) => {
+  const steamID = games.value[index]?.steamID
+  return {
+    'game-card': true,
+    dragging: steamID != null && steamID === draggingSteamID.value,
+    'drag-over': steamID != null && steamID === dragOverSteamID.value,
+  }
+}
 
 const launchGame = async (index: number) => {
   const g = games.value[index]
@@ -160,7 +240,66 @@ const startSteamOnly = async (index: number) => {
   }
 }
 
-const isLaunching = (index: number) => launching.value.has(index)
+const isLaunching = (index: number) => {
+  const steamID = games.value[index]?.steamID
+  return typeof steamID === 'number' ? launchingSteamIDs.value.has(steamID) : false
+}
+
+const onCardDragStart = (index: number, event: DragEvent) => {
+  const game = games.value[index]
+  if (!game) return
+  draggingSteamID.value = game.steamID
+  dragOverSteamID.value = null
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', game.steamID.toString())
+  }
+}
+
+const onCardDragOver = (index: number, event: DragEvent) => {
+  if (!draggingSteamID.value) return
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+  const steamID = games.value[index]?.steamID
+  if (!steamID || steamID === draggingSteamID.value) {
+    dragOverSteamID.value = null
+    return
+  }
+  dragOverSteamID.value = steamID
+}
+
+const onCardDragLeave = (index: number) => {
+  const steamID = games.value[index]?.steamID
+  if (steamID && steamID === dragOverSteamID.value) {
+    dragOverSteamID.value = null
+  }
+}
+
+const onCardDrop = (index: number, event: DragEvent) => {
+  event.preventDefault()
+  const steamID = games.value[index]?.steamID
+  reorderGames(steamID)
+}
+
+const onCardDragEnd = () => {
+  resetDragState()
+}
+
+const onGridDragOver = (event: DragEvent) => {
+  if (!draggingSteamID.value) return
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+  dragOverSteamID.value = null
+}
+
+const onGridDrop = (event: DragEvent) => {
+  event.preventDefault()
+  reorderGames(undefined)
+}
 
 const refresh = async () => {
   loading.value = true
@@ -193,12 +332,10 @@ const refresh = async () => {
 
 .header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  padding: 1rem 2rem;
   background-color: var(--surface-2);
   border-bottom: 1px solid var(--border-color);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);
 }
 
 .header h1 {
@@ -206,16 +343,15 @@ const refresh = async () => {
   font-weight: 600;
 }
 
-.header-actions { display: flex; gap: 0.5rem; align-items: center; }
+.header-actions { display: flex; align-items: center; }
 .app-refresh-btn,
 .app-settings-btn {
   background: none;
   border: none;
   color: var(--text-color);
-  font-size: 2rem;
+  font-size: 1rem;
   cursor: pointer;
   padding: 0.5rem;
-  border-radius: 4px;
   transition: background-color 0.2s;
   display: block;
 }

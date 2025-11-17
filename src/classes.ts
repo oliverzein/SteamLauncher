@@ -143,6 +143,7 @@ interface Game {
   processName?: string
   resolution?: string
   notes?: string
+  order?: number
 }
 
 interface Config {

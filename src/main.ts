@@ -69,6 +69,34 @@ let isQuitting = false
 const VERBOSE = !!process.env.SL_VERBOSE
 const vlog = (...args: any[]) => { if (VERBOSE) console.log('[verbose]', ...args) }
 
+const compareByOrder = (a: Game, b: Game): number => {
+  const ao = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER
+  const bo = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER
+  if (ao !== bo) return ao - bo
+  return a.name.localeCompare(b.name)
+}
+
+const getNextOrderValue = (): number => {
+  let max = -1
+  for (const game of config.steamApps) {
+    if (typeof game.order === 'number' && game.order > max) {
+      max = game.order
+    }
+  }
+  return max + 1
+}
+
+const reindexGameOrders = (): void => {
+  const sorted = [...config.steamApps].sort(compareByOrder)
+  sorted.forEach((game, index) => {
+    game.order = index
+  })
+}
+
+const getVisibleGamesSorted = (): Game[] => {
+  return config.steamApps.filter(game => !game.hidden).sort(compareByOrder)
+}
+
 // Run a shell command and resolve when done
 function run(cmd: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
@@ -177,6 +205,8 @@ function loadConfig(): void {
         delete parsed.compatdataPath
       }
       config = { ...config, ...parsed }
+      reindexGameOrders()
+      saveConfig()
     }
   } catch (error) {
     console.error('Failed to load config:', error)
@@ -198,6 +228,7 @@ function saveConfig(): void {
         processName: g.processName,
         resolution: g.resolution,
         notes: g.notes,
+        order: typeof g.order === 'number' ? g.order : undefined,
       })),
     }
     fs.writeFileSync(configPath, JSON.stringify(sanitized, null, 2))
@@ -264,8 +295,12 @@ async function fetchGames(): Promise<Game[]> {
               steamID: steamID,
               hidden: false,
               processName: undefined,
+              order: getNextOrderValue(),
             }
             config.steamApps.push(gameConfig)
+          }
+          if (typeof gameConfig.order !== 'number') {
+            gameConfig.order = getNextOrderValue()
           }
 
           // Fetch latest game details
@@ -283,6 +318,8 @@ async function fetchGames(): Promise<Game[]> {
     }
   }
 
+  reindexGameOrders()
+  games.sort(compareByOrder)
   return games
 }
 
@@ -412,7 +449,7 @@ const createWindow = () => {
       const ses = mainWindow.webContents.session
       ses.clearCache()
       ses.clearStorageData({
-        storages: ['appcache', 'serviceworkers', 'cachestorage']
+        storages: ['serviceworkers', 'cachestorage']
       })
     } catch {}
     // Add a cache-busting query parameter to avoid reusing stale bundles
@@ -578,7 +615,8 @@ ipcMain.handle('start-game', async (event, index: number) => {
     // Apply optional screen resolution before launching
     await applyResolutionIfConfigured(index)
     // Notify renderer after prep work has started
-    BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-started', index))
+    const launchEventPayload = { index, steamID: starter.steamID }
+    BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-started', launchEventPayload))
     const result = await starter.execute()
     // Start process watcher; fall back to Steam client if no per-game processName configured
     const game = getGameForVisibleIndex(index)
@@ -594,13 +632,13 @@ ipcMain.handle('start-game', async (event, index: number) => {
       const tick = () => {
         attempt++
         if (Date.now() - start > timeoutMs) {
-          BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+          BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', launchEventPayload))
           return
         }
         exec(cmd, (err, stdout, stderr) => {
           const out = (stdout || '').trim()
           if (out.length > 0) {
-            BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+            BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', launchEventPayload))
           } else {
             setTimeout(tick, 1500)
           }
@@ -610,11 +648,12 @@ ipcMain.handle('start-game', async (event, index: number) => {
       setTimeout(tick, initialDelayMs)
     } else {
       // Stop immediately if failed
-      BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+      BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', launchEventPayload))
     }
     return result
   } catch (error) {
-    BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
+    const launchEventPayload = { index, steamID: steamStarters[index]?.steamID }
+    BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', launchEventPayload))
     return { success: false, error: (error as Error).message }
   }
 })
@@ -719,6 +758,48 @@ ipcMain.handle('save-game-config', async (event, index: number, user: string, pa
   return { success: true }
 })
 
+ipcMain.handle('save-game-order', async (_event, steamIDs: number[]) => {
+  if (!Array.isArray(steamIDs)) {
+    throw new Error('Order payload must be an array')
+  }
+  const seen = new Set<number>()
+  for (const id of steamIDs) {
+    if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
+      throw new Error('Order payload must contain positive integer steamIDs')
+    }
+    if (seen.has(id)) {
+      throw new Error('Duplicate steamIDs provided in order payload')
+    }
+    const exists = config.steamApps.some(game => game.steamID === id)
+    if (!exists) {
+      throw new Error(`Unknown steamID ${id} in order payload`)
+    }
+    seen.add(id)
+  }
+
+  let order = 0
+  for (const id of steamIDs) {
+    const game = config.steamApps.find(g => g.steamID === id)
+    if (game) {
+      game.order = order++
+    }
+  }
+  const remaining = config.steamApps
+    .filter(game => !seen.has(game.steamID))
+    .sort(compareByOrder)
+  for (const game of remaining) {
+    game.order = order++
+  }
+
+  saveConfig()
+  const visible = getVisibleGamesSorted()
+  steamStarters = visible.map(game => new SteamStarter(game.user, game.steamID, 'steam'))
+  BrowserWindow.getAllWindows().forEach(win => {
+    win.webContents.send('games-loaded', visible)
+    win.webContents.send('config-updated')
+  })
+})
+
 // Retrieve stored password for a given (user, steamID)
 ipcMain.handle('get-stored-password', async (event, steamID: number, user: string) => {
   try {
@@ -768,6 +849,7 @@ ipcMain.handle('toggle-hidden', async (event, steamID: number) => {
   saveConfig()
   // Reload games to update the list
   const updatedGames = await fetchGames()
+  steamStarters = updatedGames.map(game => new SteamStarter(game.user, game.steamID, 'steam'))
   mainWindow?.webContents.send('games-loaded', updatedGames)
   // Notify all windows of config update
   BrowserWindow.getAllWindows().forEach(win => {

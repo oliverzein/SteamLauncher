@@ -2,6 +2,10 @@
   <div class="wrap">
 
     <div class="row">
+      <label>SteamID: {{ steamID }}</label>
+    </div>
+    
+    <div class="row">
       <label>Username</label>
       <input v-model="user" :class="{ invalid: usernameError }" @input="usernameError = ''" />
       <p v-if="usernameError" class="error">{{ usernameError }}</p>
