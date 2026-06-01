@@ -28,9 +28,6 @@
           @drop="onCardDrop(index, $event)"
           @dragend="onCardDragEnd"
         >
-          <div v-if="game.updateAvailable" class="update-badge" title="Update available">
-            <img :src="upgradeIcon" alt="Update available" class="upgrade-icon-img" />
-          </div>
           <img 
             v-if="game.icon" 
             :src="game.icon" 
@@ -42,6 +39,9 @@
           <div class="game-info">
             <span class="game-title">{{ game.name }}</span>
             <div class="game-actions">
+              <button v-if="game.updateAvailable" class="game-update-btn" title="Update available" aria-label="Update game">
+                <img :src="upgradeIcon" alt="Update" />
+              </button>
               <button @click.stop="startSteamOnly(index)" title="Start Steam for this game account" class="start-steam-icon" aria-label="Start Steam">
                 <img :src="steamIcon" alt="Steam" />
               </button>
@@ -465,19 +465,22 @@ const refresh = async () => {
 .launching-text { color: #fff; font-size: 0.95rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.update-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  pointer-events: none;
-  z-index: 5;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-}
-
-.upgrade-icon-img {
-  width: 32px;
-  height: 32px;
+.game-update-btn {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0;
   display: block;
+}
+.game-update-btn img {
+  width: 1.1rem;
+  height: 1.1rem;
+  display: block;
+}
+.game-update-btn:hover {
+  filter: brightness(1.2);
 }
 
 .modal-backdrop {
