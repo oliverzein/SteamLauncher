@@ -404,7 +404,38 @@ const refresh = async () => {
 
 .game-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 6px;
+  align-items: center;
+}
+
+.game-actions button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-color);
+  font-size: 1.05rem;
+  line-height: 1;
+  transition: background-color 0.2s, filter 0.2s;
+  border-radius: 4px;
+}
+
+.game-actions button:hover {
+  filter: brightness(1.2);
+  background-color: var(--hover-color, rgba(61, 174, 233, 0.15));
+}
+
+.game-actions button img {
+  width: 1.05rem;
+  height: 1.05rem;
+  display: block;
+  object-fit: contain;
 }
 
 .game-icon {
@@ -413,37 +444,6 @@ const refresh = async () => {
   display: block;
   background-color: var(--surface-1);
 }
-
-.game-hide-icon {
-  background: none;
-  border: none;
-  color: var(--text-color);
-  font-size: 1.0rem;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-  display: block;
-}
-.game-hide-icon:hover { filter: brightness(1.2); }
-
-.game-settings-icon {
-  background: none;
-  border: none;
-  color: var(--text-color);
-  font-size: 1.0rem;
-  cursor: pointer;
-}
-.game-settings-icon:hover { filter: brightness(1.2); }
-
-.start-steam-icon {
-  background: none;
-  border: none;
-  color: var(--text-color);
-  font-size: 1rem;
-  cursor: pointer;
-}
-.start-steam-icon img { width: 1.1rem; height: 1.1rem; display: block; }
-.start-steam-icon:hover { filter: brightness(1.2); }
 
 .launching-overlay {
   position: absolute;
@@ -464,24 +464,6 @@ const refresh = async () => {
 }
 .launching-text { color: #fff; font-size: 0.95rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-.game-update-btn {
-  background: none;
-  border: none;
-  color: var(--text-color);
-  font-size: 1rem;
-  cursor: pointer;
-  padding: 0;
-  display: block;
-}
-.game-update-btn img {
-  width: 1.1rem;
-  height: 1.1rem;
-  display: block;
-}
-.game-update-btn:hover {
-  filter: brightness(1.2);
-}
 
 .modal-backdrop {
   position: fixed;
