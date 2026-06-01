@@ -144,6 +144,8 @@ interface Game {
   resolution?: string
   notes?: string
   order?: number
+  updateAvailable?: boolean
+  lastUpdateCheck?: number
 }
 
 interface Config {

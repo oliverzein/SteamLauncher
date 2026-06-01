@@ -28,6 +28,9 @@
           @drop="onCardDrop(index, $event)"
           @dragend="onCardDragEnd"
         >
+          <div v-if="game.updateAvailable" class="update-badge" title="Update available">
+            📥 Update
+          </div>
           <img 
             v-if="game.icon" 
             :src="game.icon" 
@@ -460,6 +463,22 @@ const refresh = async () => {
 }
 .launching-text { color: #fff; font-size: 0.95rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.update-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: var(--accent-color);
+  color: #161925;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 5;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
 
 .modal-backdrop {
   position: fixed;

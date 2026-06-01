@@ -192,6 +192,150 @@ async function applyResolutionIfConfigured(index: number): Promise<void> {
   }
 }
 
+// Get the local buildID from the appmanifest file on disk
+function getLocalBuildID(steamID: number): string | null {
+  try {
+    for (const cp of config.compatdataPaths) {
+      const fullPath = cp.replace('~', os.homedir())
+      const steamappsDir = path.resolve(fullPath, '..')
+      const acfPath = path.join(steamappsDir, `appmanifest_${steamID}.acf`)
+      if (fs.existsSync(acfPath)) {
+        const content = fs.readFileSync(acfPath, 'utf8')
+        const match = content.match(/^\s*"buildid"\s*"(\d+)"/mi)
+        if (match) {
+          return match[1]
+        }
+      }
+    }
+  } catch (error) {
+    if (VERBOSE) console.error(`Failed to get local build ID for ${steamID}:`, error)
+  }
+  return null
+}
+
+// Fetch the remote buildID from Steam Web-API with local SteamCMD fallback
+function getRemoteBuildID(steamID: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const url = `https://api.steamcmd.net/v1/info/${steamID}`
+    const req = https.get(url, (res) => {
+      let data = ''
+      res.on('data', (chunk) => data += chunk)
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data)
+          if (json.status === 'success' && json.data?.[steamID]?.depots?.branches?.public?.buildid) {
+            const buildID = String(json.data[steamID].depots.branches.public.buildid)
+            if (VERBOSE) vlog(`Fetched remote buildID ${buildID} for AppID ${steamID} from Web-API`)
+            return resolve(buildID)
+          }
+        } catch (e) {
+          if (VERBOSE) console.error(`Failed to parse Web-API JSON for AppID ${steamID}:`, e)
+        }
+        runSteamcmdFallback()
+      })
+    })
+
+    req.on('error', (err) => {
+      if (VERBOSE) console.error(`Web-API error for AppID ${steamID}:`, err)
+      runSteamcmdFallback()
+    })
+
+    req.setTimeout(5000, () => {
+      if (VERBOSE) console.warn(`Web-API timeout for AppID ${steamID}`)
+      req.destroy()
+      runSteamcmdFallback()
+    })
+
+    const runSteamcmdFallback = () => {
+      if (VERBOSE) vlog(`Running steamcmd fallback to get remote buildID for AppID ${steamID}`)
+      const cmd = `steamcmd +login anonymous +app_info_update 1 +app_info_print ${steamID} +quit`
+      exec(cmd, (error, stdout) => {
+        if (error) {
+          if (VERBOSE) console.error(`SteamCMD fallback execution failed for AppID ${steamID}:`, error)
+          return resolve(null)
+        }
+        try {
+          const publicIdx = stdout.indexOf('"public"')
+          if (publicIdx !== -1) {
+            const afterPublic = stdout.substring(publicIdx)
+            const match = afterPublic.match(/"buildid"\s*"(\d+)"/i)
+            if (match) {
+              const buildID = match[1]
+              if (VERBOSE) vlog(`Fetched remote buildID ${buildID} for AppID ${steamID} from SteamCMD`)
+              return resolve(buildID)
+            }
+          }
+          const simpleMatch = stdout.match(/"buildid"\s*"(\d+)"/i)
+          if (simpleMatch) {
+            return resolve(simpleMatch[1])
+          }
+        } catch (e) {
+          if (VERBOSE) console.error(`Failed to parse SteamCMD output for AppID ${steamID}:`, e)
+        }
+        resolve(null)
+      })
+    }
+  })
+}
+
+// Compare local and remote buildID to check for updates and update config
+async function checkGameUpdate(steamID: number, force = false): Promise<boolean> {
+  const game = config.steamApps.find(g => g.steamID === steamID)
+  if (!game) return false
+
+  const now = Date.now()
+  const twelveHoursMs = 12 * 60 * 60 * 1000
+  if (!force && game.lastUpdateCheck && (now - game.lastUpdateCheck < twelveHoursMs)) {
+    if (VERBOSE) vlog(`Skipping update check for AppID ${steamID} (already checked recently)`)
+    return !!game.updateAvailable
+  }
+
+  const localBuildID = getLocalBuildID(steamID)
+  if (!localBuildID) {
+    if (VERBOSE) vlog(`No local buildID found for AppID ${steamID}`)
+    return false
+  }
+
+  const remoteBuildID = await getRemoteBuildID(steamID)
+  if (!remoteBuildID) {
+    if (VERBOSE) console.warn(`Failed to fetch remote buildID for AppID ${steamID}`)
+    return !!game.updateAvailable
+  }
+
+  const updateAvailable = localBuildID !== remoteBuildID
+  const oldUpdate = game.updateAvailable
+  const oldCheck = game.lastUpdateCheck
+
+  game.updateAvailable = updateAvailable
+  game.lastUpdateCheck = now
+
+  if (oldUpdate !== updateAvailable || oldCheck !== now) {
+    saveConfig()
+  }
+
+  if (VERBOSE) {
+    vlog(`AppID ${steamID} buildID compare: Local=${localBuildID}, Remote=${remoteBuildID}. UpdateAvailable=${updateAvailable}`)
+  }
+
+  return updateAvailable
+}
+
+// Perform background update checks for all visible games and notify windows reactively
+async function triggerBackgroundUpdateChecks(force = false): Promise<void> {
+  if (VERBOSE) vlog(`Starting background update checks (force=${force}) for all games...`)
+  const visible = getVisibleGamesSorted()
+  for (const game of visible) {
+    try {
+      await checkGameUpdate(game.steamID, force)
+      BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('games-loaded', getVisibleGamesSorted())
+      })
+    } catch (e) {
+      if (VERBOSE) console.error(`Error checking update for AppID ${game.steamID}:`, e)
+    }
+  }
+}
+
 // Load config from file
 function loadConfig(): void {
   try {
@@ -229,6 +373,8 @@ function saveConfig(): void {
         resolution: g.resolution,
         notes: g.notes,
         order: typeof g.order === 'number' ? g.order : undefined,
+        updateAvailable: g.updateAvailable,
+        lastUpdateCheck: g.lastUpdateCheck,
       })),
     }
     fs.writeFileSync(configPath, JSON.stringify(sanitized, null, 2))
@@ -590,6 +736,7 @@ app.whenReady().then(async () => {
     }
     mainWindow.webContents.once('did-finish-load', () => {
       mainWindow.webContents.send('games-loaded', games)
+      triggerBackgroundUpdateChecks(false)
     })
   }
 })
@@ -924,6 +1071,7 @@ ipcMain.handle('refresh-games', async () => {
   const games = await fetchGames()
   steamStarters = games.map(game => new SteamStarter(game.user, game.steamID, 'steam'))
   BrowserWindow.getAllWindows().forEach(win => win.webContents.send('games-loaded', games))
+  triggerBackgroundUpdateChecks(true)
   return { success: true, count: games.length }
 })
 
