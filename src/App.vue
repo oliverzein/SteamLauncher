@@ -29,7 +29,7 @@
           @dragend="onCardDragEnd"
         >
           <div v-if="game.updateAvailable" class="update-badge" title="Update available">
-            📥 Update
+            <img :src="upgradeIcon" alt="Update available" class="upgrade-icon-img" />
           </div>
           <img 
             v-if="game.icon" 
@@ -73,6 +73,7 @@
 import { ref, onMounted } from 'vue'
 import type { Game } from './classes'
 import steamIcon from '../assets/Steam_icon_logo.svg'
+import upgradeIcon from '../assets/icons8-upgrade-48.png'
 
 const games = ref<Game[]>([])
 const loading = ref(true)
@@ -468,16 +469,15 @@ const refresh = async () => {
   position: absolute;
   top: 10px;
   right: 10px;
-  background-color: var(--accent-color);
-  color: #161925;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: bold;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
   pointer-events: none;
   z-index: 5;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.upgrade-icon-img {
+  width: 32px;
+  height: 32px;
+  display: block;
 }
 
 .modal-backdrop {
