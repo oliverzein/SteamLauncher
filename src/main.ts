@@ -660,6 +660,11 @@ const createWindow = () => {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     //mainWindow.webContents.openDevTools();
   }
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    mainWindow?.webContents.send('games-loaded', getVisibleGamesSorted())
+    triggerBackgroundUpdateChecks(false)
+  })
 };
 
 // This method will be called when Electron has finished
@@ -734,10 +739,6 @@ app.whenReady().then(async () => {
       mainWindow.hide()
       mainWindow.setSkipTaskbar(true)
     }
-    mainWindow.webContents.once('did-finish-load', () => {
-      mainWindow.webContents.send('games-loaded', games)
-      triggerBackgroundUpdateChecks(false)
-    })
   }
 })
 

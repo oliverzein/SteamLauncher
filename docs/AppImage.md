@@ -88,6 +88,10 @@ On first run, your desktop environment may prompt for AppImage desktop integrati
     npm run make -- --targets=@reforged/maker-appimage
     ```
 
+- **Silent Hang/Exit during packaging (Node 26+ Compatibility)**
+  - **Issue**: On newer Node.js runtimes (v26.1.0+), the `extract-zip`/`yauzl` library used inside `@electron/packager` triggers an early exit with code 0 before completing the extraction of the Electron binary archive.
+  - **Fix**: The package was patched at `node_modules/@electron/packager/dist/unzip.js` to use the fast native system `unzip` utility on non-Windows platforms. Ensure the system `unzip` command is installed (available by default on CachyOS).
+
 - Paths differ
   - Forge may vary the output path slightly by OS/arch. Check the list of artifacts:
     ```bash
@@ -107,3 +111,4 @@ On first run, your desktop environment may prompt for AppImage desktop integrati
   - `new MakerAppImage({ /* options */ })`
 
 You can customize desktop metadata (e.g., `category`) in that maker’s options.
+
