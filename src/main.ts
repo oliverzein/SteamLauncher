@@ -1303,7 +1303,7 @@ ipcMain.handle('update-game', async (event, steamID: number) => {
             const destFile = path.join(steamappsDir, file)
             const stat = fs.statSync(srcFile)
             if (stat.isFile()) {
-              if (file.startsWith('appmanifest_') && file.endsWith('.acf')) {
+              if (file === `appmanifest_${steamID}.acf`) {
                 fs.copyFileSync(srcFile, destFile)
                 fs.unlinkSync(srcFile)
                 appendToLog(`Copied manifest ${file} to ${steamappsDir}\n`)
