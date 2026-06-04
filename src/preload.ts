@@ -96,7 +96,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Listen for configure game event
   onConfigureGame: (callback: (game: Game, index: number) => void): void => {
     ipcRenderer.on('configure-game', (event, game: Game, index: number) => callback(game, index))
-  }
+  },
+
+  // Trigger game update
+  updateGame: (steamID: number): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('update-game', steamID),
+
+  // Submit Steam Guard code
+  submitSteamGuard: (steamID: number, code: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('submit-steam-guard', steamID, code),
+
+  // Cancel game update
+  cancelUpdate: (steamID: number): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('cancel-update', steamID),
+
+  // Listen for update progress events
+  onUpdateProgress: (callback: (data: { steamID: number; status: string; progress: number; bytesDownloaded: number; bytesTotal: number; error?: string }) => void): void => {
+    ipcRenderer.on('update-progress', (event, data) => callback(data))
+  },
+
+  // Listen for Steam Guard interactive prompt request
+  onSteamGuardRequired: (callback: (data: { steamID: number; user: string }) => void): void => {
+    ipcRenderer.on('steam-guard-required', (event, data) => callback(data))
+  },
+
+  // Get application version from package.json
+  getAppVersion: (): Promise<string> =>
+    ipcRenderer.invoke('get-app-version')
 })
 
 // Type declarations for the renderer process
@@ -120,6 +146,12 @@ declare global {
       onLaunchingStarted: (callback: (index: number) => void) => void
       onLaunchingStopped: (callback: (index: number) => void) => void
       onConfigureGame: (callback: (game: Game, index: number) => void) => void
+      updateGame: (steamID: number) => Promise<{ success: boolean; error?: string }>
+      submitSteamGuard: (steamID: number, code: string) => Promise<{ success: boolean; error?: string }>
+      cancelUpdate: (steamID: number) => Promise<{ success: boolean; error?: string }>
+      onUpdateProgress: (callback: (data: { steamID: number; status: string; progress: number; bytesDownloaded: number; bytesTotal: number; error?: string }) => void) => void
+      onSteamGuardRequired: (callback: (data: { steamID: number; user: string }) => void) => void
+      getAppVersion: () => Promise<string>
     }
   }
 }

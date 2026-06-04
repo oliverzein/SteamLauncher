@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // In dev, wait for the Vite dev server to respond with a non-504 before loading the URL
 function waitForDevServer(urlStr: string, overallTimeoutMs = 10000, retryIntervalMs = 200): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -40,7 +41,7 @@ declare const CONFIGURE_WINDOW_VITE_DEV_SERVER_URL: string | undefined
 declare const CONFIGURE_WINDOW_VITE_NAME: string
 import { app, BrowserWindow, ipcMain, Menu, globalShortcut, Tray, nativeImage } from 'electron';
 import type { Event as ElectronEvent } from 'electron'
-import { exec } from 'child_process';
+import { exec, spawn, ChildProcess } from 'child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import * as fs from 'fs';
@@ -249,7 +250,13 @@ function getRemoteBuildID(steamID: number): Promise<string | null> {
     const runSteamcmdFallback = () => {
       if (VERBOSE) vlog(`Running steamcmd fallback to get remote buildID for AppID ${steamID}`)
       const cmd = `steamcmd +login anonymous +app_info_update 1 +app_info_print ${steamID} +quit`
-      exec(cmd, (error, stdout) => {
+      const tempHome = path.join(app.getPath('userData'), 'steamcmd_home')
+      try {
+        fs.mkdirSync(tempHome, { recursive: true })
+      } catch (err) {
+        // Ignore folder already exists errors
+      }
+      exec(cmd, { env: { ...process.env, HOME: tempHome } }, (error, stdout) => {
         if (error) {
           if (VERBOSE) console.error(`SteamCMD fallback execution failed for AppID ${steamID}:`, error)
           return resolve(null)
@@ -597,7 +604,9 @@ const createWindow = () => {
       ses.clearStorageData({
         storages: ['serviceworkers', 'cachestorage']
       })
-    } catch {}
+    } catch {
+      // Ignore cache clearing errors
+    }
     // Add a cache-busting query parameter to avoid reusing stale bundles
     const devUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL.includes('?')
       ? `${MAIN_WINDOW_VITE_DEV_SERVER_URL}&t=${Date.now()}`
@@ -1065,6 +1074,325 @@ ipcMain.handle('start-steam-only', async (_event, index: number) => {
     BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
     return { success: false, error: (e as Error).message }
   }
+})
+
+// Manually refresh game library
+// Game update session tracking
+interface UpdateSession {
+  steamID: number
+  child: ChildProcess
+  user: string
+}
+const activeUpdates = new Map<number, UpdateSession>()
+
+// Securely retrieve stored password for keytar/steamcmd use
+async function getStoredPasswordForUpdate(steamID: number, user: string): Promise<string | null> {
+  try {
+    const req = createRequire(__filename)
+    let keytar: { getPassword: (service: string, account: string) => Promise<string | null> }
+    try {
+      keytar = req('keytar')
+    } catch {
+      try {
+        const altUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
+        keytar = req(altUnpacked)
+      } catch {
+        try {
+          const altResources = path.join(process.resourcesPath, 'keytar')
+          keytar = req(altResources)
+        } catch {
+          const altNodeModules = path.join(process.resourcesPath, 'node_modules', 'keytar')
+          keytar = req(altNodeModules)
+        }
+      }
+    }
+    const account = `${user}:${steamID}`
+    return await keytar.getPassword('steamlauncher', account)
+  } catch (e) {
+    if (VERBOSE) console.error('Failed to retrieve password for update:', e)
+    return null
+  }
+}
+
+// Trigger asynchronous steamcmd update process
+ipcMain.handle('update-game', async (event, steamID: number) => {
+  try {
+    if (activeUpdates.has(steamID)) {
+      return { success: false, error: 'Update already in progress for this game' }
+    }
+    const game = config.steamApps.find(g => g.steamID === steamID)
+    if (!game) {
+      return { success: false, error: 'Game not found in configuration' }
+    }
+
+    // 1. Locate Game Install Folder
+    let acfPath: string | null = null
+    let steamappsDir: string | null = null
+    for (const cp of config.compatdataPaths) {
+      const fullPath = cp.replace('~', os.homedir())
+      const sAppsDir = path.resolve(fullPath, '..')
+      const checkPath = path.join(sAppsDir, `appmanifest_${steamID}.acf`)
+      if (fs.existsSync(checkPath)) {
+        acfPath = checkPath
+        steamappsDir = sAppsDir
+        break
+      }
+    }
+
+    if (!acfPath || !steamappsDir) {
+      return { success: false, error: 'Could not locate appmanifest file for game' }
+    }
+
+    const content = fs.readFileSync(acfPath, 'utf8')
+    const match = content.match(/^\s*"installdir"\s*"([^"]+)"/mi)
+    if (!match) {
+      return { success: false, error: 'Could not parse installdir from appmanifest file' }
+    }
+    const installdir = match[1]
+    const gamePath = path.join(steamappsDir, 'common', installdir)
+
+    // 2. Retrieve Stored Password
+    const password = await getStoredPasswordForUpdate(steamID, game.user)
+    if (!password) {
+      return { success: false, error: 'No password stored for this game account. Please configure credentials.' }
+    }
+
+    // 3. Spawn steamcmd process
+    const logPath = path.join(app.getPath('userData'), `steamcmd_update_${steamID}.log`)
+    try {
+      fs.writeFileSync(logPath, `=== SteamCMD Update Log for ${game.name} (AppID ${steamID}) ===\nStarted: ${new Date().toISOString()}\nPath: ${gamePath}\nUser: ${game.user}\nLocal buildID: ${getLocalBuildID(steamID) || 'Unknown'}\n\n`)
+    } catch (logErr) {
+      console.error('Failed to create update log file:', logErr)
+    }
+
+    console.log(`[SteamLauncher Update ${steamID}] Spawning steamcmd. Log file: ${logPath}`)
+    BrowserWindow.getAllWindows().forEach(win => {
+      win.webContents.send('update-progress', { steamID, status: 'checking', progress: 0, bytesDownloaded: 0, bytesTotal: 0 })
+    })
+
+    const tempHome = path.join(app.getPath('userData'), 'steamcmd_home')
+    try {
+      fs.mkdirSync(tempHome, { recursive: true })
+    } catch (err) {
+      // Ignore folder already exists errors
+    }
+
+    const child = spawn('steamcmd', [
+      '+force_install_dir', gamePath,
+      '+login', game.user, password,
+      '+app_update', steamID.toString(),
+      '+quit'
+    ], {
+      env: {
+        ...process.env,
+        HOME: tempHome
+      }
+    })
+
+    activeUpdates.set(steamID, { steamID, child, user: game.user })
+
+    let accumulatedStdout = ''
+    let guardPrompted = false
+    const recentLines: string[] = []
+
+    const appendToLog = (text: string) => {
+      try {
+        fs.appendFileSync(logPath, text)
+      } catch (e) {
+        console.error('Failed appending to update log:', e)
+      }
+    }
+
+    child.stdout.on('data', (data: Buffer) => {
+      const chunk = data.toString()
+      accumulatedStdout += chunk
+      appendToLog(chunk)
+
+      if (VERBOSE) process.stdout.write(`[steamcmd ${steamID}] ${chunk}`)
+
+      // Detect Steam Guard (2FA) & Interactive Login
+      if (!guardPrompted && (
+        accumulatedStdout.includes('Steam Guard code') ||
+        accumulatedStdout.includes('Two-factor code') ||
+        accumulatedStdout.includes('Google Authenticator code') ||
+        accumulatedStdout.includes('Enter code:')
+      )) {
+        guardPrompted = true
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('steam-guard-required', { steamID, user: game.user })
+          win.webContents.send('update-progress', { steamID, status: '2fa', progress: 0, bytesDownloaded: 0, bytesTotal: 0 })
+        })
+      }
+
+      // Parse lines for progress and error context
+      const lines = chunk.split('\n')
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (trimmed) {
+          recentLines.push(trimmed)
+          if (recentLines.length > 15) {
+            recentLines.shift()
+          }
+        }
+
+        // Parse progress: progress: 45.23 (1209384 / 2673849)
+        const progressRegex = /progress:\s+([\d.]+)\s+\((\d+)\s+\/\s+(\d+)\)/
+        const match = line.match(progressRegex)
+        if (match) {
+          const progress = parseFloat(match[1])
+          const bytesDownloaded = parseInt(match[2], 10)
+          const bytesTotal = parseInt(match[3], 10)
+
+          let status = 'updating'
+          if (line.toLowerCase().includes('download')) {
+            status = 'downloading'
+          } else if (line.toLowerCase().includes('verify') || line.toLowerCase().includes('validate')) {
+            status = 'validating'
+          } else if (line.toLowerCase().includes('preallocat')) {
+            status = 'preallocating'
+          }
+
+          BrowserWindow.getAllWindows().forEach(win => {
+            win.webContents.send('update-progress', { steamID, status, progress, bytesDownloaded, bytesTotal })
+          })
+        }
+      }
+    })
+
+    child.stderr.on('data', (data: Buffer) => {
+      const chunk = data.toString()
+      appendToLog(chunk)
+      console.error(`[steamcmd ${steamID} stderr] ${chunk}`)
+
+      const lines = chunk.split('\n')
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (trimmed) {
+          recentLines.push(`[stderr] ${trimmed}`)
+          if (recentLines.length > 15) {
+            recentLines.shift()
+          }
+        }
+      }
+    })
+
+    child.on('error', (err: Error) => {
+      const errMsg = `Failed to start steamcmd process: ${err.message}`
+      appendToLog(`\nERROR: ${errMsg}\n`)
+      console.error(`[steamcmd ${steamID} error]`, err)
+      activeUpdates.delete(steamID)
+      BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('update-progress', { steamID, status: 'failed', progress: 0, bytesDownloaded: 0, bytesTotal: 0, error: `${errMsg}\n\nFull log: ${logPath}` })
+      })
+    })
+
+    child.on('close', async (code: number) => {
+      const endMsg = `Process exited with code ${code}`
+      appendToLog(`\n${endMsg}\n`)
+      console.log(`[steamcmd ${steamID}] ${endMsg}`)
+      activeUpdates.delete(steamID)
+
+      // Post-install manifest sync and cleanup
+      const nestedSteamappsDir = path.join(gamePath, 'steamapps')
+      if (fs.existsSync(nestedSteamappsDir)) {
+        try {
+          appendToLog(`Syncing manifests from nested directory: ${nestedSteamappsDir} to ${steamappsDir}\n`)
+          const files = fs.readdirSync(nestedSteamappsDir)
+          for (const file of files) {
+            const srcFile = path.join(nestedSteamappsDir, file)
+            const destFile = path.join(steamappsDir, file)
+            const stat = fs.statSync(srcFile)
+            if (stat.isFile()) {
+              if (file.startsWith('appmanifest_') && file.endsWith('.acf')) {
+                fs.copyFileSync(srcFile, destFile)
+                fs.unlinkSync(srcFile)
+                appendToLog(`Copied manifest ${file} to ${steamappsDir}\n`)
+              }
+            }
+          }
+          // Clean up the nested directories/files recursively
+          const cleanDirRecursive = (dir: string) => {
+            if (fs.existsSync(dir)) {
+              fs.readdirSync(dir).forEach((f) => {
+                const curPath = path.join(dir, f)
+                if (fs.lstatSync(curPath).isDirectory()) {
+                  cleanDirRecursive(curPath)
+                } else {
+                  fs.unlinkSync(curPath)
+                }
+              })
+              fs.rmdirSync(dir)
+            }
+          }
+          cleanDirRecursive(nestedSteamappsDir)
+          appendToLog(`Cleaned up nested steamapps directory.\n`)
+        } catch (syncErr) {
+          const syncErrMsg = `Failed to sync nested manifest files: ${(syncErr as Error).message}`
+          console.error(syncErrMsg)
+          appendToLog(`ERROR: ${syncErrMsg}\n`)
+        }
+      }
+
+      // Run checkGameUpdate to verify if update succeeded
+      await checkGameUpdate(steamID, true)
+      const gameAfterCheck = config.steamApps.find(g => g.steamID === steamID)
+      const success = gameAfterCheck ? !gameAfterCheck.updateAvailable : false
+
+      appendToLog(`Post-update verification: success=${success}, localBuildID=${getLocalBuildID(steamID) || 'Unknown'}\n`)
+
+      if (success) {
+        if (code !== 0) {
+          appendToLog(`Warning: Process exited with non-zero code ${code}, but manifest was updated successfully.\n`)
+        }
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('update-progress', { steamID, status: 'completed', progress: 100, bytesDownloaded: 0, bytesTotal: 0 })
+          win.webContents.send('games-loaded', getVisibleGamesSorted())
+        })
+      } else {
+        const preview = recentLines.join('\n')
+        const errorMsg = `Process exited with code ${code}. Update verification failed.\n\nLast output:\n${preview}\n\nFull log: ${logPath}`
+        console.error(`[SteamLauncher Update ${steamID} failed] ${errorMsg}`)
+        BrowserWindow.getAllWindows().forEach(win => {
+          win.webContents.send('update-progress', { steamID, status: 'failed', progress: 0, bytesDownloaded: 0, bytesTotal: 0, error: errorMsg })
+        })
+      }
+    })
+
+    return { success: true }
+  } catch (error) {
+    if (VERBOSE) console.error(`Failed to trigger update for AppID ${steamID}:`, error)
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+// Submit interactive Steam Guard code
+ipcMain.handle('submit-steam-guard', async (event, steamID: number, code: string) => {
+  const session = activeUpdates.get(steamID)
+  if (session && session.child && session.child.stdin) {
+    if (VERBOSE) vlog(`Submitting Steam Guard code for ${steamID}`)
+    session.child.stdin.write(code + '\n')
+    return { success: true }
+  }
+  return { success: false, error: 'No active update session found' }
+})
+
+// Cancel active update session
+ipcMain.handle('cancel-update', async (event, steamID: number) => {
+  const session = activeUpdates.get(steamID)
+  if (session) {
+    if (VERBOSE) vlog(`Cancelling update for ${steamID}`)
+    if (session.child) {
+      session.child.kill()
+    }
+    activeUpdates.delete(steamID)
+    return { success: true }
+  }
+  return { success: false, error: 'No active update session found' }
+})
+
+// Retrieve current application version from package.json
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion()
 })
 
 // Manually refresh game library
