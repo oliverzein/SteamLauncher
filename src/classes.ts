@@ -2,6 +2,26 @@ import { spawn, ChildProcess } from 'child_process'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 
+function loadKeytar(): any {
+  const req = createRequire(__filename)
+  try {
+    return req('keytar')
+  } catch {
+    try {
+      const altUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
+      return req(altUnpacked)
+    } catch {
+      try {
+        const altResources = path.join(process.resourcesPath, 'keytar')
+        return req(altResources)
+      } catch {
+        const altNodeModules = path.join(process.resourcesPath, 'node_modules', 'keytar')
+        return req(altNodeModules)
+      }
+    }
+  }
+}
+
 // ##############
 // Classes
 // ##############
@@ -11,7 +31,6 @@ interface ExecutionResult {
   pid?: number
   error?: string
 }
-
 
 class AppStarter {
   executablePath: string
@@ -51,28 +70,7 @@ class SteamStarter extends AppStarter {
   // fallow-ignore-next-line unused-class-member
   async execute(): Promise<ExecutionResult> {
     try {
-      // Load keytar at runtime with fallback to unpacked path in production
-      let keytar: { getPassword: (service: string, account: string) => Promise<string | null> }
-      try {
-        const require = createRequire(__filename)
-        keytar = require('keytar')
-      } catch {
-        try {
-          const altUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
-          const require = createRequire(__filename)
-          keytar = require(altUnpacked)
-        } catch {
-          try {
-            const altResources = path.join(process.resourcesPath, 'keytar')
-            const require = createRequire(__filename)
-            keytar = require(altResources)
-          } catch {
-            const altNodeModules = path.join(process.resourcesPath, 'node_modules', 'keytar')
-            const require = createRequire(__filename)
-            keytar = require(altNodeModules)
-          }
-        }
-      }
+      const keytar = loadKeytar()
       const account = `${this.user}:${this.steamID}`
       const password = await keytar.getPassword('steamlauncher', account)
       if (!password) {
@@ -91,28 +89,7 @@ class SteamStarter extends AppStarter {
   // fallow-ignore-next-line unused-class-member
   async executeSteamOnly(): Promise<ExecutionResult> {
     try {
-      // Load keytar at runtime with fallback to unpacked path in production
-      let keytar: { getPassword: (service: string, account: string) => Promise<string | null> }
-      try {
-        const require = createRequire(__filename)
-        keytar = require('keytar')
-      } catch {
-        try {
-          const altUnpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'keytar')
-          const require = createRequire(__filename)
-          keytar = require(altUnpacked)
-        } catch {
-          try {
-            const altResources = path.join(process.resourcesPath, 'keytar')
-            const require = createRequire(__filename)
-            keytar = require(altResources)
-          } catch {
-            const altNodeModules = path.join(process.resourcesPath, 'node_modules', 'keytar')
-            const require = createRequire(__filename)
-            keytar = require(altNodeModules)
-          }
-        }
-      }
+      const keytar = loadKeytar()
       const account = `${this.user}:${this.steamID}`
       const password = await keytar.getPassword('steamlauncher', account)
       if (!password) {
@@ -156,4 +133,4 @@ interface Config {
 // Exports
 // ##############
 
-export { SteamStarter, Game, Config }
+export { SteamStarter, Game, Config, loadKeytar }

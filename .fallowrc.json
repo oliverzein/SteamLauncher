@@ -16,5 +16,8 @@
   "duplicates": {
     "minOccurrences": 3
   },
+  "ignoreDependencies": [
+    "keytar"
+  ],
   "rules": {}
 }
