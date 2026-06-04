@@ -20,3 +20,4 @@ All phases of the Game Update feature are fully implemented and committed to the
   - **Steam Guard Prompt**: Detects interactive 2FA challenge, requests input via modal, feeds code to process stdin.
   - **UI Progress Overlay**: Overlays cards with blur-backdrop, progress bar, percentage, status text, and cancel controls.
   - **Verifying Update Success**: Automatically checks game update status again upon exit to confirm success.
+  - **Manifest Sync Safety**: Only the target game's manifest file (`appmanifest_[steamID].acf`) is synced on success, preventing compatibility tools and other dependency manifests from being corrupted or duplicated in the primary library.
