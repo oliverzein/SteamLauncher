@@ -12,10 +12,6 @@ interface ExecutionResult {
   error?: string
 }
 
-interface AppConfig {
-  executablePath: string
-  executableArgs: string[]
-}
 
 class AppStarter {
   executablePath: string
@@ -52,6 +48,7 @@ class SteamStarter extends AppStarter {
     this.steamID = steamID
   }
 
+  // fallow-ignore-next-line unused-class-member
   async execute(): Promise<ExecutionResult> {
     try {
       // Load keytar at runtime with fallback to unpacked path in production
@@ -91,6 +88,7 @@ class SteamStarter extends AppStarter {
   }
 
   // Start Steam for this account without launching the game (omit -applaunch)
+  // fallow-ignore-next-line unused-class-member
   async executeSteamOnly(): Promise<ExecutionResult> {
     try {
       // Load keytar at runtime with fallback to unpacked path in production
@@ -158,4 +156,4 @@ interface Config {
 // Exports
 // ##############
 
-export { AppStarter, SteamStarter, ExecutionResult, AppConfig, Game, Config }
+export { SteamStarter, Game, Config }

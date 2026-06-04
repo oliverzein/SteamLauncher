@@ -49,7 +49,7 @@ import * as https from 'https';
 import * as http from 'http';
 import * as os from 'os';
 import started from 'electron-squirrel-startup';
-import { AppStarter, SteamStarter, Game, Config } from './classes'
+import { SteamStarter, Game, Config } from './classes'
 
 // Reduce Chromium/Electron log verbosity (set before 'ready')
 // log-level 3 = warnings and above; v=0 disables extra verbose logs
@@ -68,7 +68,7 @@ let isQuitting = false
 
 // Verbose logging toggle (set SL_VERBOSE=1 to enable)
 const VERBOSE = !!process.env.SL_VERBOSE
-const vlog = (...args: any[]) => { if (VERBOSE) console.log('[verbose]', ...args) }
+const vlog = (...args: unknown[]) => { if (VERBOSE) console.log('[verbose]', ...args) }
 
 const compareByOrder = (a: Game, b: Game): number => {
   const ao = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER
@@ -102,7 +102,7 @@ const getVisibleGamesSorted = (): Game[] => {
 function run(cmd: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     exec(cmd, (error, stdout, stderr) => {
-      resolve({ code: error ? (error as any).code ?? 1 : 0, stdout: stdout ?? '', stderr: stderr ?? '' })
+      resolve({ code: error ? (error as { code?: number }).code ?? 1 : 0, stdout: stdout ?? '', stderr: stderr ?? '' })
     })
   })
 }
@@ -153,15 +153,7 @@ async function ensureSteamUserOrShutdown(desiredUser: string): Promise<void> {
     // Different account: request shutdown and wait until gone
     exec('steam -shutdown', () => { /* noop */ })
     const start = Date.now()
-    const timeoutMs = 30000
-    const waitTick = () => {
-      exec("pgrep -x steam", (err, stdout) => {
-        const stillRunning = !err && !!(stdout && stdout.trim().length > 0)
-        if (!stillRunning) return
-        if (Date.now() - start > timeoutMs) return
-        setTimeout(waitTick, 500)
-      })
-    }
+
     await new Promise<void>((resolve) => {
       const loop = () => {
         exec("pgrep -x steam", (err, stdout) => {
@@ -184,7 +176,7 @@ async function applyResolutionIfConfigured(index: number): Promise<void> {
     const game = getGameForVisibleIndex(index)
     const res = game?.resolution?.trim()
     if (!res) return
-    const { code, stderr } = await run(`kscreen-doctor ${res}`)
+    const { code } = await run(`kscreen-doctor ${res}`)
     if (code !== 0) {
       // silently ignore non-zero exit
     }
@@ -392,7 +384,7 @@ function saveConfig(): void {
 
 // Fetch game details from Steam API
 async function fetchAppDetails(steamID: number): Promise<{ name: string; icon?: string }> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const url = `https://store.steampowered.com/api/appdetails?appids=${steamID}`
     https.get(url, (res) => {
       let data = ''
@@ -646,15 +638,16 @@ const createWindow = () => {
     let watchdogTriggered = false
     mainWindow.webContents.on('did-finish-load', () => {
       setTimeout(async () => {
-        if (watchdogTriggered || mainWindow.isDestroyed()) return
+        const win = mainWindow
+        if (watchdogTriggered || !win || win.isDestroyed()) return
         try {
-          const contentLen: number = await mainWindow!.webContents.executeJavaScript(
+          const contentLen: number = await win.webContents.executeJavaScript(
             'document.body && document.body.innerText ? document.body.innerText.trim().length : 0',
             true
           )
           if (contentLen < 5) {
             watchdogTriggered = true
-            mainWindow!.webContents.reloadIgnoringCache()
+            win.webContents.reloadIgnoringCache()
           }
         } catch { /* ignore */ }
       }, 1200)
@@ -785,14 +778,12 @@ ipcMain.handle('start-game', async (event, index: number) => {
       const timeoutMs = 120000 // 120s timeout
       const initialDelayMs = 4000
       const cmd = buildPgrepCmd(procName)
-      let attempt = 0
       const tick = () => {
-        attempt++
         if (Date.now() - start > timeoutMs) {
           BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', launchEventPayload))
           return
         }
-        exec(cmd, (err, stdout, stderr) => {
+        exec(cmd, (err, stdout) => {
           const out = (stdout || '').trim()
           if (out.length > 0) {
             BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', launchEventPayload))
@@ -1049,14 +1040,12 @@ ipcMain.handle('start-steam-only', async (_event, index: number) => {
       const timeoutMs = 120000 // 120s timeout
       const initialDelayMs = 4000
       const cmd = buildPgrepCmd(procName)
-      let attempt = 0
       const tick = () => {
-        attempt++
         if (Date.now() - start > timeoutMs) {
           BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))
           return
         }
-        exec(cmd, (err, stdout, stderr) => {
+        exec(cmd, (err, stdout) => {
           const out = (stdout || '').trim()
           if (out.length > 0) {
             BrowserWindow.getAllWindows().forEach(win => win.webContents.send('launching-stopped', index))

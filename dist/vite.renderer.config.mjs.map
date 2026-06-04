@@ -1,0 +1,1 @@
+{"version":3,"file":"vite.renderer.config.mjs","sourceRoot":"","sources":["../vite.renderer.config.mts"],"names":[],"mappings":"AAAA,OAAO,EAAE,YAAY,EAAE,MAAM,MAAM,CAAA;AACnC,OAAO,GAAG,MAAM,oBAAoB,CAAA;AAEpC,4BAA4B;AAC5B,eAAe,YAAY,CAAC;IAC1B,OAAO,EAAE,CAAC,GAAG,EAAE,CAAC;IAChB,YAAY,EAAE;QACZ,KAAK,EAAE,IAAI;QACX,kFAAkF;QAClF,OAAO,EAAE,KAAK;KACf;CACF,CAAC,CAAA"}
