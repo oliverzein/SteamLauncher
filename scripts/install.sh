@@ -20,28 +20,19 @@ if [ -z "$APPIMAGE_PATH" ]; then
   APPIMAGE_PATH=$(find "$SCRIPT_DIR" -maxdepth 1 -name "steamlauncher-*-x64.AppImage" 2>/dev/null | head -n 1)
 fi
 
-# 1.4 Wenn nicht gefunden, von Google Drive herunterladen
+# 1.4 Wenn nicht gefunden, von GitHub Release herunterladen
 if [ -z "$APPIMAGE_PATH" ] || [ ! -f "$APPIMAGE_PATH" ]; then
   if ! command -v curl &> /dev/null; then
     echo "Fehler: AppImage nicht lokal gefunden und 'curl' wird für den Download benötigt."
     exit 1
   fi
 
-  echo "Kein lokales AppImage gefunden. Lade von Google Drive herunter..."
-  FILE_ID="1hMCdU-X6xrCIdAZJn1FCPBezNOGJepom"
+  echo "Kein lokales AppImage gefunden. Lade von GitHub Release herunter..."
   OUT_FILE="steamlauncher-1.6.0-x64.AppImage"
-  
-  COOKIE_FILE=$(mktemp)
-  HTML_FILE=$(mktemp)
-  
-  curl -s -c "$COOKIE_FILE" -L "https://drive.usercontent.google.com/download?id=${FILE_ID}&export=download" -o "$HTML_FILE"
-  CONFIRM=$(grep -o 'name="confirm" value="[^"]*"' "$HTML_FILE" | cut -d'"' -f4)
-  UUID=$(grep -o 'name="uuid" value="[^"]*"' "$HTML_FILE" | cut -d'"' -f4)
+  URL="https://github.com/oliverzein/SteamLauncher/releases/download/v1.6.0/$OUT_FILE"
   
   echo "Downloade $OUT_FILE..."
-  curl -# -L -b "$COOKIE_FILE" "https://drive.usercontent.google.com/download?id=${FILE_ID}&export=download&confirm=${CONFIRM}&uuid=${UUID}" -o "$OUT_FILE"
-  
-  rm -f "$COOKIE_FILE" "$HTML_FILE"
+  curl -# -L "$URL" -o "$OUT_FILE"
   
   if [ -f "$OUT_FILE" ] && [ -s "$OUT_FILE" ]; then
     APPIMAGE_PATH="$OUT_FILE"
