@@ -1,50 +1,34 @@
 #!/bin/bash
 set -e
 
-# 1. Build the AppImage
-echo "Building AppImage..."
+# 1. AppImage bauen
+echo "Baue AppImage..."
 npm run make -- --targets=AppImage
 
-# 2. Locate built AppImage
+# 2. Gebautes AppImage lokalisieren
 APPIMAGE_PATH=$(find out/make/AppImage/x64 -name "steamlauncher-*-x64.AppImage" | head -n 1)
 
 if [ -z "$APPIMAGE_PATH" ]; then
-  echo "Error: AppImage build not found."
+  echo "Fehler: AppImage-Build nicht gefunden."
   exit 1
 fi
 
-echo "Found built AppImage: $APPIMAGE_PATH"
+echo "Gefundenes AppImage: $APPIMAGE_PATH"
 
-# 3. Create directories
-mkdir -p "$HOME/.local/bin"
-mkdir -p "$HOME/.local/share/applications"
-mkdir -p "$HOME/.local/share/icons"
+# 3. Version aus package.json auslesen
+VERSION=$(node -p "require('./package.json').version")
+TAG="v$VERSION"
 
-# 4. Copy AppImage to bin and make executable
-echo "Installing AppImage to $HOME/.local/bin/steamlauncher..."
-cp "$APPIMAGE_PATH" "$HOME/.local/bin/steamlauncher"
-chmod +x "$HOME/.local/bin/steamlauncher"
+echo "Erkannte Version: $VERSION (Tag: $TAG)"
 
-# 5. Copy icon
-echo "Installing application icon..."
-cp assets/app-icon.png "$HOME/.local/share/icons/steamlauncher.png"
+# 4. Release auf GitHub erstellen / aktualisieren
+echo "Prüfe GitHub-Release für Tag $TAG..."
+if gh release view "$TAG" >/dev/null 2>&1; then
+  echo "Release $TAG existiert bereits. Aktualisiere AppImage-Asset..."
+  gh release upload "$TAG" "$APPIMAGE_PATH" --clobber
+else
+  echo "Erstelle neues GitHub-Release für $TAG und lade AppImage hoch..."
+  gh release create "$TAG" "$APPIMAGE_PATH" --title "$TAG" --notes "Release $TAG"
+fi
 
-# 6. Generate desktop entry
-echo "Registering desktop entry..."
-cat <<EOF > "$HOME/.local/share/applications/steamlauncher.desktop"
-[Desktop Entry]
-Name=SteamLauncher
-Comment=Steam account game launcher
-Exec=${HOME}/.local/bin/steamlauncher
-Icon=steamlauncher
-Terminal=false
-Type=Application
-Categories=Game;Utility;
-StartupWMClass=steamlauncher
-EOF
-
-# 7. Update desktop database
-echo "Updating desktop database..."
-update-desktop-database "$HOME/.local/share/applications" || true
-
-echo "Deployment complete! SteamLauncher is now available in your application launcher menu."
+echo "Veröffentlichung auf GitHub erfolgreich abgeschlossen!"
