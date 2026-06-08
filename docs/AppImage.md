@@ -104,6 +104,22 @@ On first run, your desktop environment may prompt for AppImage desktop integrati
     SL_VERBOSE=1 npm start
     ```
 
+## Releasing to GitHub (Automated)
+
+The project includes a deployment script at `scripts/deploy.sh` to automate the build and release process:
+
+- **Local Build only** (does not publish to GitHub):
+  ```bash
+  ./scripts/deploy.sh
+  ```
+  *(or via npm: `npm run deploy`)*
+
+- **Publish/Upload to GitHub Releases**:
+  ```bash
+  ./scripts/deploy.sh --release
+  ```
+  This will automatically detect the version from `package.json`, create a GitHub release (if it doesn't exist), and upload the built AppImage asset (updating it if it already exists).
+
 ## Where it’s configured
 
 - AppImage maker is configured in `forge.config.ts` in the `makers` array using:
