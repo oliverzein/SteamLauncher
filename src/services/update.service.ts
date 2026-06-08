@@ -1,5 +1,5 @@
 import { app, BrowserWindow } from 'electron'
-import { spawn, ChildProcess } from 'child_process'
+import { spawn, execSync, ChildProcess } from 'child_process'
 import path from 'node:path'
 import * as fs from 'fs'
 import * as os from 'os'
@@ -36,6 +36,14 @@ class UpdateService {
 
   public async updateGame(steamID: number): Promise<{ success: boolean; error?: string }> {
     try {
+      // Check if steamcmd is installed
+      try {
+        const checkCmd = process.platform === 'win32' ? 'where steamcmd' : 'which steamcmd'
+        execSync(checkCmd, { stdio: 'ignore' })
+      } catch {
+        return { success: false, error: 'SteamCMD was not found on your system. Please install "steamcmd" to enable game updates.' }
+      }
+
       if (this.activeUpdates.has(steamID)) {
         return { success: false, error: 'Update already in progress for this game' }
       }
@@ -355,7 +363,7 @@ class UpdateService {
           }
           BrowserWindow.getAllWindows().forEach(win => {
             win.webContents.send('update-progress', { steamID, status: 'completed', progress: 100, bytesDownloaded: 0, bytesTotal: 0 })
-            win.webContents.send('games-loaded', steamService.getVisibleGamesSorted ? steamService.getVisibleGamesSorted() : configService.getVisibleGamesSorted())
+            win.webContents.send('games-loaded', (steamService as any).getVisibleGamesSorted ? (steamService as any).getVisibleGamesSorted() : configService.getVisibleGamesSorted())
           })
         } else {
           const preview = recentLines.join('\n')
