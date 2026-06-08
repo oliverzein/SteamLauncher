@@ -112,3 +112,23 @@ On first run, your desktop environment may prompt for AppImage desktop integrati
 
 You can customize desktop metadata (e.g., `category`) in that maker’s options.
 
+## Installing on another PC
+
+You can easily install the AppImage on another Linux machine using the automated installation script. 
+
+The script will:
+1. Automatically download the AppImage from Google Drive if it's not found locally.
+2. Extract the application icon directly from the AppImage.
+3. Install the AppImage to `~/.local/bin/steamlauncher`.
+4. Register the icon under `~/.local/share/icons/steamlauncher.png`.
+5. Create a desktop entry at `~/.local/share/applications/steamlauncher.desktop`.
+6. Update the system desktop database.
+
+### One-liner installation:
+
+Run the following command in your terminal:
+
+```bash
+curl -sL https://raw.githubusercontent.com/oliverzein/SteamLauncher/master/scripts/install.sh | bash
+```
+
