@@ -44,7 +44,11 @@ if [ -z "$APPIMAGE_PATH" ] || [ ! -f "$APPIMAGE_PATH" ]; then
   URL="https://github.com/oliverzein/SteamLauncher/releases/download/${LATEST_TAG}/${OUT_FILE}"
   
   echo "Downloade $OUT_FILE..."
-  curl -# -L "$URL" -o "$OUT_FILE"
+  if ! curl -# -f -L "$URL" -o "$OUT_FILE"; then
+    echo "Fehler: Download fehlgeschlagen (HTTP-Fehler)."
+    rm -f "$OUT_FILE"
+    exit 1
+  fi
   
   if [ -f "$OUT_FILE" ] && [ -s "$OUT_FILE" ]; then
     APPIMAGE_PATH="$OUT_FILE"
@@ -57,6 +61,16 @@ fi
 # Absolute Pfadangabe sicherstellen
 APPIMAGE_PATH=$(realpath "$APPIMAGE_PATH")
 echo "AppImage gefunden/geladen: $APPIMAGE_PATH"
+
+# AppImage ELF-Signatur prüfen
+if [ ! -f "$APPIMAGE_PATH" ] || [ "$(head -c 4 "$APPIMAGE_PATH" | od -An -tx1 | tr -d ' \n')" != "7f454c46" ]; then
+  echo "Fehler: Die Datei '$APPIMAGE_PATH' ist kein gültiges AppImage (ungültige ELF-Signatur)."
+  # Heruntergeladene Datei aufräumen
+  if [ -n "$OUT_FILE" ] && [ "$APPIMAGE_PATH" = "$(realpath "$OUT_FILE" 2>/dev/null)" ]; then
+    rm -f "$OUT_FILE"
+  fi
+  exit 1
+fi
 
 # 2. Icon suchen
 ICON_PATH=""
