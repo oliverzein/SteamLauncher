@@ -1,6 +1,16 @@
 #!/bin/bash
 set -e
 
+# Parameter auswerten
+RELEASE=false
+while [[ "$#" -gt 0 ]]; do
+  case $1 in
+    --release|-r) RELEASE=true ;;
+    *) echo "Unbekannter Parameter: $1" ; echo "Nutzung: $0 [--release | -r]" ; exit 1 ;;
+  esac
+  shift
+done
+
 # 1. AppImage bauen
 echo "Baue AppImage..."
 npm run make -- --targets=AppImage
@@ -21,14 +31,17 @@ TAG="v$VERSION"
 
 echo "Erkannte Version: $VERSION (Tag: $TAG)"
 
-# 4. Release auf GitHub erstellen / aktualisieren
-echo "Prüfe GitHub-Release für Tag $TAG..."
-if gh release view "$TAG" >/dev/null 2>&1; then
-  echo "Release $TAG existiert bereits. Aktualisiere AppImage-Asset..."
-  gh release upload "$TAG" "$APPIMAGE_PATH" --clobber
+# 4. Nur hochladen, wenn der Parameter --release/-r übergeben wurde
+if [ "$RELEASE" = true ]; then
+  echo "Prüfe GitHub-Release für Tag $TAG..."
+  if gh release view "$TAG" >/dev/null 2>&1; then
+    echo "Release $TAG existiert bereits. Aktualisiere AppImage-Asset..."
+    gh release upload "$TAG" "$APPIMAGE_PATH" --clobber
+  else
+    echo "Erstelle neues GitHub-Release für $TAG und lade AppImage hoch..."
+    gh release create "$TAG" "$APPIMAGE_PATH" --title "$TAG" --notes "Release $TAG"
+  fi
+  echo "Veröffentlichung auf GitHub erfolgreich abgeschlossen!"
 else
-  echo "Erstelle neues GitHub-Release für $TAG und lade AppImage hoch..."
-  gh release create "$TAG" "$APPIMAGE_PATH" --title "$TAG" --notes "Release $TAG"
+  echo "Lokaler Build erfolgreich abgeschlossen! (Nutzung: $0 --release zum Veröffentlichen)"
 fi
-
-echo "Veröffentlichung auf GitHub erfolgreich abgeschlossen!"
