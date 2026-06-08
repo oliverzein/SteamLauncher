@@ -11,12 +11,18 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-# 1. AppImage bauen
+# 1. Version aus package.json auslesen
+VERSION=$(node -p "require('./package.json').version")
+TAG="v$VERSION"
+
+echo "Erkannte Version: $VERSION (Tag: $TAG)"
+
+# 2. AppImage bauen
 echo "Baue AppImage..."
 npm run make -- --targets=AppImage
 
-# 2. Gebautes AppImage lokalisieren
-APPIMAGE_PATH=$(find out/make/AppImage/x64 -name "steamlauncher-*-x64.AppImage" | head -n 1)
+# 3. Gebautes AppImage lokalisieren (nutzt die ausgelesene Version)
+APPIMAGE_PATH=$(find out/make/AppImage/x64 -name "steamlauncher-${VERSION}-x64.AppImage" | head -n 1)
 
 if [ -z "$APPIMAGE_PATH" ]; then
   echo "Fehler: AppImage-Build nicht gefunden."
@@ -25,11 +31,7 @@ fi
 
 echo "Gefundenes AppImage: $APPIMAGE_PATH"
 
-# 3. Version aus package.json auslesen
-VERSION=$(node -p "require('./package.json').version")
-TAG="v$VERSION"
 
-echo "Erkannte Version: $VERSION (Tag: $TAG)"
 
 # 4. Nur hochladen, wenn der Parameter --release/-r übergeben wurde
 if [ "$RELEASE" = true ]; then
