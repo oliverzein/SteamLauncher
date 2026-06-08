@@ -30,8 +30,10 @@ const config: ForgeConfig = {
     new MakerRpm({}),
     new MakerDeb({}),
     new MakerAppImage({
-      // See options: https://www.npmjs.com/package/@reforged/maker-appimage
-      // category: 'Game',
+      options: {
+        icon: 'assets/app-icon.png',
+        categories: ['Game', 'Utility'],
+      }
     }),
   ],
   plugins: [

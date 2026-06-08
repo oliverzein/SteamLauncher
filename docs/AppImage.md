@@ -35,7 +35,7 @@ From the project root:
 - Build ONLY the AppImage target:
 
 ```bash
-npm run make -- --targets=@reforged/maker-appimage
+npm run make -- --targets=AppImage
 ```
 
 - Or build all configured makers (may require additional external tools):
@@ -85,7 +85,7 @@ On first run, your desktop environment may prompt for AppImage desktop integrati
 - Error: `Cannot make for rpm, the following external binaries need to be installed: rpmbuild`
   - Either install the tool (e.g., `sudo pacman -S rpm-tools` or `sudo apt-get install rpm`) or build only the AppImage target:
     ```bash
-    npm run make -- --targets=@reforged/maker-appimage
+    npm run make -- --targets=AppImage
     ```
 
 - **Silent Hang/Exit during packaging (Node 26+ Compatibility)**

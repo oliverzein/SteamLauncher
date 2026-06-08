@@ -3,7 +3,7 @@ set -e
 
 # 1. Build the AppImage
 echo "Building AppImage..."
-npm run make -- --targets=@reforged/maker-appimage
+npm run make -- --targets=AppImage
 
 # 2. Locate built AppImage
 APPIMAGE_PATH=$(find out/make/AppImage/x64 -name "steamlauncher-*-x64.AppImage" | head -n 1)
