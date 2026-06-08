@@ -132,8 +132,9 @@ Wenn das Repository bereits auf dem Zielrechner geklont ist:
 ./scripts/install.sh
 ```
 
-**Option B: Über curl (Erfordert GitHub-Token, da das Repository privat ist)**
+**Option B: Über curl (Einzeiler für öffentliche Installation)**
+Lädt das Skript direkt herunter und führt es aus (benutzt einen Cache-Buster, um immer die aktuellste Version zu erhalten):
 ```bash
-curl -sL -H "Authorization: token DEIN_GITHUB_TOKEN" https://raw.githubusercontent.com/oliverzein/SteamLauncher/master/scripts/install.sh | bash
+curl -sL "https://raw.githubusercontent.com/oliverzein/SteamLauncher/master/scripts/install.sh?t=\$(date +%s)" | bash
 ```
 
