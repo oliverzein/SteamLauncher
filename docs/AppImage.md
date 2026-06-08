@@ -124,11 +124,16 @@ The script will:
 5. Create a desktop entry at `~/.local/share/applications/steamlauncher.desktop`.
 6. Update the system desktop database.
 
-### One-liner installation:
+### Installation:
 
-Run the following command in your terminal:
-
+**Option A: Aus dem geklonten Repository (Empfohlen)**
+Wenn das Repository bereits auf dem Zielrechner geklont ist:
 ```bash
-curl -sL https://raw.githubusercontent.com/oliverzein/SteamLauncher/master/scripts/install.sh | bash
+./scripts/install.sh
+```
+
+**Option B: Über curl (Erfordert GitHub-Token, da das Repository privat ist)**
+```bash
+curl -sL -H "Authorization: token DEIN_GITHUB_TOKEN" https://raw.githubusercontent.com/oliverzein/SteamLauncher/master/scripts/install.sh | bash
 ```
 
