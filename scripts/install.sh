@@ -27,9 +27,21 @@ if [ -z "$APPIMAGE_PATH" ] || [ ! -f "$APPIMAGE_PATH" ]; then
     exit 1
   fi
 
-  echo "Kein lokales AppImage gefunden. Lade von GitHub Release herunter..."
-  OUT_FILE="steamlauncher-1.6.0-x64.AppImage"
-  URL="https://github.com/oliverzein/SteamLauncher/releases/download/v1.6.0/$OUT_FILE"
+  echo "Ermittle neueste Version von GitHub..."
+  # Neuesten Release-Tag über die API abrufen
+  LATEST_TAG=$(curl -s "https://api.github.com/repos/oliverzein/SteamLauncher/releases/latest" | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4)
+  
+  # Fallback bei Rate-Limit oder Verbindungsfehlern
+  if [ -z "$LATEST_TAG" ]; then
+    LATEST_TAG="v1.6.0"
+    echo "Konnte neueste Version nicht ermitteln. Nutze Fallback: $LATEST_TAG"
+  else
+    echo "Neueste Version gefunden: $LATEST_TAG"
+  fi
+
+  VERSION=${LATEST_TAG#v}
+  OUT_FILE="steamlauncher-${VERSION}-x64.AppImage"
+  URL="https://github.com/oliverzein/SteamLauncher/releases/download/${LATEST_TAG}/${OUT_FILE}"
   
   echo "Downloade $OUT_FILE..."
   curl -# -L "$URL" -o "$OUT_FILE"
