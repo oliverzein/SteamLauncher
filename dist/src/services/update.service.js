@@ -125,6 +125,32 @@ class UpdateService {
             const isolatedAppsDir = node_path_1.default.join(tempHome, '.steam', 'steamcmd', 'steamapps');
             try {
                 fs.mkdirSync(isolatedAppsDir, { recursive: true });
+                // Verlinke echte steamcmd-Systemdateien (außer steamapps), damit der Wrapper funktioniert
+                const realSteamcmdDir = node_path_1.default.join(os.homedir(), '.steam', 'steamcmd');
+                const tempSteamcmdDir = node_path_1.default.join(tempHome, '.steam', 'steamcmd');
+                if (fs.existsSync(realSteamcmdDir)) {
+                    const items = fs.readdirSync(realSteamcmdDir);
+                    for (const item of items) {
+                        if (item !== 'steamapps') {
+                            const srcItem = node_path_1.default.join(realSteamcmdDir, item);
+                            const destItem = node_path_1.default.join(tempSteamcmdDir, item);
+                            try {
+                                if (fs.existsSync(destItem) || fs.lstatSync(destItem).isSymbolicLink()) {
+                                    fs.unlinkSync(destItem);
+                                }
+                            }
+                            catch (e) {
+                                // Ignorieren
+                            }
+                            try {
+                                fs.symlinkSync(srcItem, destItem);
+                            }
+                            catch (symErr) {
+                                console.error(`Fehler beim Verlinken von steamcmd-Systemdatei ${item}:`, symErr);
+                            }
+                        }
+                    }
+                }
                 const isolatedCommon = node_path_1.default.join(isolatedAppsDir, 'common');
                 const targetCommon = node_path_1.default.join(targetAppsDir, 'common');
                 if (fs.existsSync(isolatedCommon) || fs.lstatSync(isolatedCommon).isSymbolicLink()) {

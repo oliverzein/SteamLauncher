@@ -101,6 +101,31 @@ class UpdateService {
       try {
         fs.mkdirSync(isolatedAppsDir, { recursive: true })
 
+        // Verlinke echte steamcmd-Systemdateien (außer steamapps), damit der Wrapper funktioniert
+        const realSteamcmdDir = path.join(os.homedir(), '.steam', 'steamcmd')
+        const tempSteamcmdDir = path.join(tempHome, '.steam', 'steamcmd')
+        if (fs.existsSync(realSteamcmdDir)) {
+          const items = fs.readdirSync(realSteamcmdDir)
+          for (const item of items) {
+            if (item !== 'steamapps') {
+              const srcItem = path.join(realSteamcmdDir, item)
+              const destItem = path.join(tempSteamcmdDir, item)
+              try {
+                if (fs.existsSync(destItem) || fs.lstatSync(destItem).isSymbolicLink()) {
+                  fs.unlinkSync(destItem)
+                }
+              } catch (e) {
+                // Ignorieren
+              }
+              try {
+                fs.symlinkSync(srcItem, destItem)
+              } catch (symErr) {
+                console.error(`Fehler beim Verlinken von steamcmd-Systemdatei ${item}:`, symErr)
+              }
+            }
+          }
+        }
+
         const isolatedCommon = path.join(isolatedAppsDir, 'common')
         const targetCommon = path.join(targetAppsDir, 'common')
         if (fs.existsSync(isolatedCommon) || fs.lstatSync(isolatedCommon).isSymbolicLink()) {
