@@ -33,6 +33,11 @@ const config: ForgeConfig = {
       options: {
         icon: 'assets/app-icon.png',
         categories: ['Game', 'Utility'],
+        // Use uruntime instead of type2-runtime to fix FUSE suspend deadlock.
+        // type2-runtime has a known kernel freezer deadlock on suspend (issue #119).
+        // uruntime handles FUSE lifecycle differently (idle unmount, extract-and-run fallback).
+        // See: knowledge-vault:SteamLauncher/steamlauncher-fuse-suspend-deadlock.md
+        runtime: 'https://github.com/VHSgunzo/uruntime/releases/download/v0.5.8/uruntime-appimage-squashfs-x86_64',
       }
     }),
   ],
