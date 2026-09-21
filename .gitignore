@@ -90,3 +90,12 @@ typings/
 
 # Electron-Forge
 out/
+
+# Graphify analysis artifacts
+graphify-out/
+
+# Backup files
+*.bak
+
+# Local suspend hook script
+/10-steamlauncher.sh

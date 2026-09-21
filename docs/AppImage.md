@@ -128,29 +128,35 @@ The project includes a deployment script at `scripts/deploy.sh` to automate the 
 
 You can customize desktop metadata (e.g., `category`) in that maker’s options.
 
-## Installing on another PC
+## Installation Options
 
-You can easily install the AppImage on another Linux machine using the automated installation script. 
+### Native Installation (Recommended)
+
+To prevent FUSE suspend deadlocks and user-namespace / bubblewrap issues on Linux, SteamLauncher is preferably installed natively unpacked to `~/.local/lib/steamlauncher` (symlinked from `~/.local/bin/steamlauncher`).
+
+The `scripts/install.sh` script handles building the native package and installing it:
+
+1. **From cloned repository:**
+   ```bash
+   ./scripts/install.sh
+   ```
+   Add `--force-build` if you wish to trigger a new Electron packaging build before installing:
+   ```bash
+   ./scripts/install.sh --force-build
+   ```
+
+2. **Via curl one-liner:**
+   ```bash
+   curl -sL "https://raw.githubusercontent.com/oliverzein/SteamLauncher/master/scripts/install.sh?t=\$(date +%s)" | bash
+   ```
 
 The script will:
-1. Automatically download the AppImage from Google Drive if it's not found locally.
-2. Extract the application icon directly from the AppImage.
-3. Install the AppImage to `~/.local/bin/steamlauncher`.
-4. Register the icon under `~/.local/share/icons/steamlauncher.png`.
-5. Create a desktop entry at `~/.local/share/applications/steamlauncher.desktop`.
-6. Update the system desktop database.
+1. Build the native package (`out/steamlauncher-linux-x64`) or download/use an AppImage as fallback.
+2. Install native files to `~/.local/lib/steamlauncher` and link the executable to `~/.local/bin/steamlauncher`.
+3. Register the icon under `~/.local/share/icons/steamlauncher.png`.
+4. Create desktop entries at `~/.local/share/applications/steamlauncher.desktop` and `~/.config/autostart/Steam Launcher.desktop`.
+5. Update the desktop database.
 
-### Installation:
+### Standalone AppImage
 
-**Option A: Aus dem geklonten Repository (Empfohlen)**
-Wenn das Repository bereits auf dem Zielrechner geklont ist:
-```bash
-./scripts/install.sh
-```
-
-**Option B: Über curl (Einzeiler für öffentliche Installation)**
-Lädt das Skript direkt herunter und führt es aus (benutzt einen Cache-Buster, um immer die aktuellste Version zu erhalten):
-```bash
-curl -sL "https://raw.githubusercontent.com/oliverzein/SteamLauncher/master/scripts/install.sh?t=\$(date +%s)" | bash
-```
-
+If you prefer to run SteamLauncher as an AppImage without installing it natively, follow the instructions in the [Run the AppImage](#run-the-appimage) section above. Note that running AppImages directly mounts them via FUSE.

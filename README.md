@@ -12,13 +12,34 @@ SteamLauncher is a modern, lightweight Electron-based application designed to ma
 
 ## Installation (Linux)
 
-You can easily install SteamLauncher on your Linux desktop with a single command. The installer downloads the latest AppImage, integrates the application icon, and registers a menu entry in your desktop environment automatically.
+SteamLauncher installs as a native unpacked application into `~/.local/lib/steamlauncher` (symlinked to `~/.local/bin/steamlauncher`), avoiding FUSE overhead and kernel suspend deadlocks.
 
-Run this command in your terminal:
+### From local repository (Recommended)
+
+Build and install natively with a single command:
+
+```bash
+./scripts/install.sh
+```
+
+To force a fresh build before installing:
+
+```bash
+./scripts/install.sh --force-build
+```
+
+### Via curl (One-liner)
+
+You can also run the installer script directly:
 
 ```bash
 curl -sL "https://raw.githubusercontent.com/oliverzein/SteamLauncher/master/scripts/install.sh?t=\$(date +%s)" | bash
 ```
+
+The installer automatically:
+1. Builds the native package into `out/steamlauncher-linux-x64` (or falls back to AppImage if building is skipped/unavailable).
+2. Installs the native binary to `~/.local/lib/steamlauncher` and creates a symlink at `~/.local/bin/steamlauncher`.
+3. Registers desktop and autostart entries with the application icon in your desktop environment.
 
 ## Development & Documentation
 
